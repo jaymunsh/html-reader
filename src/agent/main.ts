@@ -4,6 +4,7 @@ import { applyRestore, whenStable } from './restore';
 import { findScroller, metrics, scrollToRatio, watchScroller } from './scroller';
 import { installTap } from './tap';
 import { installKeys } from './keys';
+import { findAndReveal } from './find';
 import { parseShellMessage, wrap, type AgentMsg } from '../lib/protocol';
 
 const script = document.currentScript as HTMLScriptElement | null;
@@ -67,6 +68,7 @@ function start(): void {
       requestAnimationFrame(() => scrollToRatio(el, r));
       return;
     }
+    if (p.msg.type === 'find') { findAndReveal(p.msg.query, p.msg.snippet); return; }
     if (p.msg.type !== 'init') return;
     const { textScale, restore } = p.msg;
     if (textScale !== currentScale) {
@@ -75,6 +77,10 @@ function start(): void {
     }
     const r = restore && ('scrollRatio' in restore ? restore.scrollRatio : 'bookmark' in restore ? restore.bookmark.scrollRatio : undefined);
     if (r !== undefined) applyRestore(() => el, r);
+    else if (restore && 'find' in restore) {
+      const { query, snippet } = restore.find;
+      if (!findAndReveal(query, snippet)) whenStable(() => findAndReveal(query, snippet));
+    }
   });
 
   // First-screen progress even without scrolling; non-scrolling pages count as fully read.

@@ -180,6 +180,11 @@ try { const r = indexedDB.deleteDatabase('html-reader'); r.onsuccess = () => __i
       const n = String(i + 1).padStart(3, '0');
       return f(`p${n}.html`, page({ title: `쪽 ${n}`, h1: `p${n}` }));
     })),
+    'search.zip': z([
+      f('index.html', long({ title: '검색', h1: 'search', special: { 30: '첫 번째 고래 이야기', 170: '두 번째 고래 이야기 끝' } })),
+      f('other.html', long({ title: '다른 쪽', h1: 'other' }).replace('<p id="p120">', '<p id="split">여기 <b>알</b>파카 가 있다</p>\n<p id="p120">')
+        .replace('</body>', `<script>document.body.insertAdjacentHTML('beforeend','<p id="late">늦게 생긴 문장</p>')</script>\n</body>`)),
+    ]),
     'pick-entry.zip': z([f('a.html', page({ title: 'A', h1: 'a' })), f('b.html', page({ title: 'B', h1: 'b' }))]),
   });
   const trunc = z([f('index.html', long({ title: '잘림', h1: 'trunc' }))]);
