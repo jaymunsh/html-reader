@@ -18,7 +18,7 @@
   let tracker: ProgressTracker | null = null;
   let book: Book | undefined;
   let session: ReturnType<typeof createSession> | null = null;
-  let firstLoad = true;
+  let firstPath: string | null = null; // restore applies only to the page first requested
   let gone = false;
 
   const flush = () => { tracker?.flush().catch(() => {}); };
@@ -56,10 +56,12 @@
     tellSw({ type: 'active-book', id: bookId });
     if (gone || !iframe) return;
     path = start;
+    firstPath = start;
     session = createSession(iframe, bookId, {
       onState: (s) => { agent = s; },
       onPage: (p) => {
         path = p;
+        firstPath = null;
         void updateBook(bookId, { lastPath: p, lastOpenedAt: Date.now() }).catch(() => {});
       },
       onScroll: (pct, ratio) => { tracker?.update(path, pct, ratio); },
@@ -68,8 +70,7 @@
       onExternal: (url) => { window.open(url, '_blank', 'noopener'); },
       getInit: (p) => {
         const init: { textScale: number; restore?: Restore } = { textScale: book?.textScale ?? 1 };
-        if (firstLoad) {
-          firstLoad = false;
+        if (p === firstPath) {
           const r = tracker?.get(p)?.lastScrollRatio ?? 0;
           if (r > 0) init.restore = { scrollRatio: r };
         }

@@ -128,5 +128,7 @@ export async function scrollFrameTo(frame: Frame, ratio: number): Promise<void> 
       if ((oy === 'auto' || oy === 'scroll') && range > bestRange) { best = el; bestRange = range; }
     }
     best.scrollTop = r * bestRange;
+    // let the scroll event be delivered (and reported) before the next scroll
+    return new Promise<void>((res) => requestAnimationFrame(() => requestAnimationFrame(() => res())));
   }, ratio);
 }

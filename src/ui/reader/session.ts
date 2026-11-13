@@ -13,6 +13,8 @@ export interface SessionHooks {
   onNoSw(): void;
 }
 export const READY_TIMEOUT_MS = 3000;
+// The iframe load event can reach the shell before the agent's ready message; wait before deciding a page has no agent.
+export const LOAD_GRACE_MS = 150;
 
 function bookPathOf(pathname: string, bookId: string): string | null {
   const prefix = `/book/${bookId}/`;
@@ -24,6 +26,7 @@ export function createSession(iframe: HTMLIFrameElement, bookId: string, hooks: 
   let state: AgentState = 'pending';
   let timer: ReturnType<typeof setTimeout> | null = null;
   let readySinceLoad = false;
+  let graceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const set = (s: AgentState) => { if (state !== s) { state = s; hooks.onState(s); } };
   const clear = () => { if (timer !== null) { clearTimeout(timer); timer = null; } };
@@ -63,12 +66,18 @@ export function createSession(iframe: HTMLIFrameElement, bookId: string, hooks: 
     try { pathname = iframe.contentWindow!.location.pathname; } catch { return; }
     const path = bookPathOf(pathname, bookId);
     if (path === null) return;
+    if (graceTimer !== null) clearTimeout(graceTimer);
+    graceTimer = null;
     const hadReady = readySinceLoad;
     readySinceLoad = false;
     if (hadReady) return;
-    clear();
-    set('limited');
-    hooks.onPage(path, null);
+    graceTimer = setTimeout(() => {
+      graceTimer = null;
+      if (readySinceLoad) { readySinceLoad = false; return; } // ready arrived after load
+      clear();
+      set('limited');
+      hooks.onPage(path, null);
+    }, LOAD_GRACE_MS);
   }
 
   window.addEventListener('message', onMessage);
@@ -77,6 +86,7 @@ export function createSession(iframe: HTMLIFrameElement, bookId: string, hooks: 
   return {
     navigate(path: string): void {
       readySinceLoad = false;
+      if (graceTimer !== null) { clearTimeout(graceTimer); graceTimer = null; }
       clear();
       set('pending');
       timer = setTimeout(() => { timer = null; if (state === 'pending') set('limited'); }, READY_TIMEOUT_MS);
@@ -87,6 +97,7 @@ export function createSession(iframe: HTMLIFrameElement, bookId: string, hooks: 
     },
     destroy(): void {
       clear();
+      if (graceTimer !== null) clearTimeout(graceTimer);
       window.removeEventListener('message', onMessage);
       iframe.removeEventListener('load', onLoad);
     },
