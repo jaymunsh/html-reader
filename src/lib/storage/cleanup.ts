@@ -15,9 +15,9 @@ async function removeOrphanRecords(): Promise<void> {
     const live = new Set((await req(tx.objectStore('books').getAllKeys())) as string[]);
     const ids = new Set<string>();
     for (const name of ['bookFiles', 'texts', 'progress', 'bookmarks', 'issues']) {
-      for (const k of await req(tx.objectStore(name).getAllKeys())) {
-        const id = String(Array.isArray(k) ? k[0] : k);
-        if (!live.has(id)) ids.add(id);
+      // Read the record's bookId (primary keys of `bookmarks` are bookmark ids, not book ids).
+      for (const rec of (await req(tx.objectStore(name).getAll())) as { bookId: string }[]) {
+        if (!live.has(rec.bookId)) ids.add(rec.bookId);
       }
     }
     for (const id of ids) await deleteBookRecords(tx, id);

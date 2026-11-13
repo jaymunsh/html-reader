@@ -71,3 +71,42 @@ test('cleanupOrphans는 가져오기 잠금이 잡혀 있으면 건너뛴다 (Re
   expect(await S.cleanupOrphans()).toEqual({ skipped: false, caches: ['book-x-v1'] });
   expect(deleted).toEqual(['book-x-v1']);
 });
+
+test('cleanupOrphans는 모든 저장소의 고아 레코드를 지우고 살아있는 책은 남긴다', async () => {
+  vi.stubGlobal('navigator', {});
+  vi.stubGlobal('caches', { keys: async () => [], delete: async () => true });
+  await S.commitNewBook(book('aaaaaaaaaaaa'), { bookId: 'aaaaaaaaaaaa', paths: ['p'], titles: {} }, [{ bookId: 'aaaaaaaaaaaa', path: 'p', text: 't' }]);
+  const db = await S.openDb();
+  const seed = (id: string) => new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(['bookFiles', 'texts', 'progress', 'bookmarks', 'issues'], 'readwrite');
+    tx.objectStore('bookFiles').put({ bookId: id, paths: [], titles: {} });
+    tx.objectStore('texts').put({ bookId: id, path: 'p', text: 't' });
+    tx.objectStore('progress').put({ bookId: id, path: 'p', maxPct: 1, lastScrollRatio: 0, read: false, updatedAt: 1 });
+    tx.objectStore('bookmarks').put({ id: 'bm-' + id, bookId: id, path: 'p', scrollRatio: 0.1, label: '', createdAt: 1 });
+    tx.objectStore('issues').put({ bookId: id, path: 'p', kind: 'missing', count: 1, lastSeen: 1 });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  await seed('aaaaaaaaaaaa');
+  await seed('zzzzzzzzzzzz');
+  await S.cleanupOrphans();
+  const count = (store: string, id: string) => new Promise<number>((resolve) => {
+    const s = db.transaction(store).objectStore(store);
+    const r = store === 'bookFiles' ? s.count(id) : s.index('bookId').count(id);
+    r.onsuccess = () => resolve(r.result);
+  });
+  for (const store of ['bookFiles', 'texts', 'progress', 'bookmarks', 'issues']) {
+    expect([store, await count(store, 'zzzzzzzzzzzz')]).toEqual([store, 0]);
+    expect([store, await count(store, 'aaaaaaaaaaaa')]).toEqual([store, 1]);
+  }
+});
+test('비동기 요청 실패(ConstraintError)도 null이 아닌 오류로 거부되고 아무것도 남지 않는다', async () => {
+  await S.commitNewBook(book('aaaaaaaaaaaa'), { bookId: 'aaaaaaaaaaaa', paths: [], titles: {} }, []);
+  const err = await S.withTx(['books', 'bookFiles'], 'readwrite', (tx) => {
+    tx.objectStore('bookFiles').put({ bookId: 'cccccccccccc', paths: [], titles: {} });
+    tx.objectStore('books').add(book('aaaaaaaaaaaa'));   // duplicate key → async ConstraintError
+  }).then(() => null, (e) => e);
+  expect(err).toBeTruthy();
+  expect(typeof err.name).toBe('string');
+  expect(await S.getBookFiles('cccccccccccc')).toBeUndefined();
+});

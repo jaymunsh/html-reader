@@ -53,9 +53,11 @@ export function req<T>(r: IDBRequest<T>): Promise<T> {
 
 export function done(tx: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
+    let requestError: DOMException | null = null;
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error ?? new DOMException('Transaction aborted', 'AbortError'));
+    // The bubbled request error fires before the abort sets tx.error; capture it.
+    tx.onerror = (e) => { requestError ??= (e.target as IDBRequest | null)?.error ?? null; };
+    tx.onabort = () => reject(tx.error ?? requestError ?? new DOMException('Transaction aborted', 'AbortError'));
   });
 }
 
