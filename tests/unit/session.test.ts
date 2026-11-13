@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { LOAD_GRACE_MS, READY_TIMEOUT_MS, createSession, type SessionHooks } from '../../src/ui/reader/session';
+import { LOAD_GRACE_MS, READY_TIMEOUT_MS, createSession, pendingRestore, type SessionHooks } from '../../src/ui/reader/session';
 import { APP_TAG, PROTOCOL_VERSION } from '../../src/lib/protocol';
 
 const ORIGIN = 'https://reader.test';
@@ -114,4 +114,18 @@ test('destroy removes listeners', () => {
   const s = createSession(iframe, 'b1', h); s.navigate('index.html'); s.destroy();
   post(win, agentMsg({ type: 'ready', path: 'index.html', title: 'T' }));
   expect(states).toEqual([]);
+});
+
+test('pendingRestore: 같은 경로면 한 번 소비, 다른 경로면 비움, 이후엔 없음 (P3-K15)', () => {
+  const p = pendingRestore();
+  const r = { find: { query: 'q', snippet: 's q' } };
+  p.set('a.html', r);
+  expect(p.take('a.html')).toEqual(r);
+  expect(p.take('a.html')).toBeUndefined();
+  p.set('a.html', r);
+  expect(p.take('b.html')).toBeUndefined(); // an in-document link went elsewhere
+  expect(p.take('a.html')).toBeUndefined();
+  p.set('a.html', r);
+  p.set('c.html');                          // a plain navigation clears it
+  expect(p.take('a.html')).toBeUndefined();
 });

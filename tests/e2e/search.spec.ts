@@ -139,5 +139,26 @@ test('좁은 PC 상단 바: 검색은 44px 토글로 접히고, 토글이나 / �
   await page.getByTestId('reader-back').focus();                                // focus leaves: collapses again
   await expect(page.getByTestId('search-input')).toBeHidden();
   await page.keyboard.press('/');
-  await expect(page.getByTestId('search-input')).toBeFocused();
+  await expect(page.getByTestId('search-input')).toBeFocused();  await page.getByTestId('search-input').fill('두 번째 고래');                     // a pick hands focus back to the document
+  await page.getByTestId('search-result').first().click();
+  await expect(page.getByTestId('search-input')).toBeHidden();
+  await page.keyboard.press(']');
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'other.html');
+});
+
+test('PC: 결과를 고르면 포커스가 문서로 돌아가 단축키가 동작한다, 입력 안의 / 는 그대로 입력된다', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'PC 단축키');
+  await page.goto('/');
+  const id = await importFixture(page, 'search.zip');
+  await openBook(page, id);
+  await page.getByTestId('search-input').click();
+  await page.keyboard.type('a/b');
+  await expect(page.getByTestId('search-input')).toHaveValue('a/b');
+  await page.getByTestId('search-input').fill('두 번째 고래');
+  await page.getByTestId('search-result').first().click();
+  await expect(page.getByTestId('search-input')).not.toBeFocused();
+  await expect(page.getByTestId('search-group')).toHaveCount(0);
+  await page.keyboard.press(']');
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'other.html');
+  await expect(page.getByTestId('search-input')).toHaveValue('두 번째 고래');
 });

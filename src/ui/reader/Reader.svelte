@@ -17,7 +17,7 @@
   import SearchPanel from './SearchPanel.svelte';
   import Sheet from '../Sheet.svelte';
   import { layout } from '../layout.svelte';
-  import { createSession, type AgentState } from './session';
+  import { createSession, pendingRestore, type AgentState } from './session';
   import { isEditableTarget, shortcutFor, type Action } from '../../lib/shortcuts';
   import type { Mods } from '../../lib/protocol';
   import { stepZoom, zoomLabel } from '../../lib/zoom';
@@ -96,13 +96,14 @@
   function closeSearch() { searchOpen = false; searchHold?.(); searchHold = null; } // Sheet returns focus to btn-search
   function onSearchPick(p: string, query: string, snippet: string) {
     if (!layout.desktop) closeSearch();
+    else iframe?.focus(); // back to the document (like the panel's Escape): shortcuts work again, the dropdown's focusout closes it
     if (p === path) session?.post({ type: 'find', query, snippet });
     else nav(p, { find: { query, snippet } });
   }
-  // A restore bound to the page it was made for (P3-K15): getInit(p) uses it only for that path, and any navigation clears it.
-  let pendingRestore: { path: string; restore: Restore } | null = null;
+  // Every navigation resets the pending restore; getInit takes it once, only for its page.
+  const pending = pendingRestore();
   function nav(p: string, restore?: Restore) {
-    pendingRestore = restore ? { path: p, restore } : null;
+    pending.set(p, restore);
     session?.navigate(p);
   }
 
@@ -229,9 +230,8 @@
       onExternal: (url) => { window.open(url, '_blank', 'noopener'); },
       getInit: (p) => {
         const init: { textScale: number; restore?: Restore } = { textScale: book?.textScale ?? 1 };
-        const pr = pendingRestore;
-        pendingRestore = null; // used once, and only by the page it was made for
-        if (pr?.path === p) init.restore = pr.restore;
+        const pr = pending.take(p);
+        if (pr) init.restore = pr;
         else if (p === firstPath) {
           const r = tracker?.get(p)?.lastScrollRatio ?? 0;
           if (r > 0) init.restore = { scrollRatio: r };
@@ -278,20 +278,21 @@
     top: () => session?.post({ type: 'scroll-to', ratio: 0 }),
     bottom: () => session?.post({ type: 'scroll-to', ratio: 1 }),
   };
-  /** Returns whether a shortcut handled the key (the shell's own keydown then prevents its default, e.g. `/` typing into the search). */
-  function onKey(key: string, mods: Mods): boolean {
-    if (sheet) return false; // nothing acts behind a modal sheet; the sheets handle their own Escape
+  /** Returns the action that handled the key, if any. */
+  function onKey(key: string, mods: Mods): Action | null {
+    if (sheet) return null; // nothing acts behind a modal sheet; the sheets handle their own Escape
     const a = shortcutFor(key, mods, { desktop: layout.desktop }); // never a Ctrl/⌘/Alt combo (browser find, zoom)
     const run = a && actions[a];
-    if (!run) return false;
+    if (!run) return null;
     run();
-    return true;
+    return a;
   }
   function onWindowKey(e: KeyboardEvent) {
     if (e.defaultPrevented || e.isComposing || e.repeat || isEditableTarget(e.target as Element | null) || notice !== 'none') return;
     // Space on a focused control belongs to that control (its keyup activation), not to the overlay toggle.
     if (e.key === ' ' && (e.target as Element | null)?.closest?.('button, a[href], [role=button], [role=tab], summary')) return;
-    if (onKey(e.key, { ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey })) e.preventDefault();
+    // Only `/` prevents its default (it would type into the input it just focused); Home/End keep native list scrolling.
+    if (onKey(e.key, { ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey }) === 'search') e.preventDefault();
   }
 
   async function back() {

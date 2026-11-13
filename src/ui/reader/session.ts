@@ -103,3 +103,20 @@ export function createSession(iframe: HTMLIFrameElement, bookId: string, hooks: 
     },
   };
 }
+
+/**
+ * A restore bound to the page it was made for (P3-K15). `take(p)` hands it out once, only for that path, and clears it
+ * on any other path too (an in-document link went elsewhere). Edge: a late `ready` from the previous page would clear it
+ * as a mismatch; the find is then lost and the page opens without it.
+ */
+export function pendingRestore() {
+  let slot: { path: string; restore: Restore } | null = null;
+  return {
+    set(path: string, restore?: Restore): void { slot = restore ? { path, restore } : null; },
+    take(path: string): Restore | undefined {
+      const s = slot;
+      slot = null;
+      return s?.path === path ? s.restore : undefined;
+    },
+  };
+}

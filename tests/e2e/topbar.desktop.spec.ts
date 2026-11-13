@@ -16,6 +16,14 @@ async function controlsClear(page: Page, search: 'search-input' | 'search-toggle
     expect(b.right, `${b.id} right`).toBeLessThanOrEqual(px);
     if (b.tag !== 'INPUT') expect(Math.min(b.w, b.h), `${b.id} size`).toBeGreaterThanOrEqual(44);
   }
+  // The search field's real hit target is ≥ 44px tall: its label (with the ::before strip) is hit at centre ± 21px.
+  if (search === 'search-input') {
+    const hits = await page.getByTestId('search-input').evaluate((i) => {
+      const r = i.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      return [-21, 0, 21].map((d) => !!document.elementFromPoint(x, y + d)?.closest('label')?.contains(i));
+    });
+    expect(hits).toEqual([true, true, true]);
+  }
 }
 
 test('좁은 PC 창: 상단 바 컨트롤이 도킹 패널 밑으로 들어가지 않는다 (800px, 누락 배지)', async ({ page }) => {
