@@ -37,3 +37,28 @@ test('래퍼의 프로퍼티 접근·key()·clear() 범위', async ({ page }) =>
   expect(r).toEqual({ keys: ['foo', 'theme'], k0: 'string', len: 0, ss: 'function' });
   expect(await page.evaluate(() => localStorage.getItem('app-own'))).toBe('1');
 });
+
+test('registration.unregister()는 false를 돌려주고 앱 SW는 유지된다', async ({ page }) => {
+  await page.goto('/');
+  const id = await importFixture(page, '11-storage-peer.zip');
+  const f = await openBook(page, id);
+  expect(await f.evaluate(async () => (await navigator.serviceWorker.ready).unregister())).toBe(false);
+  expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBe(1);
+  await backToLibrary(page);
+  const f2 = await openBook(page, id);                            // SW가 여전히 서빙
+  await expect(f2.locator('#h')).toBeVisible();
+});
+
+test('storage: defineProperty는 접두사를 거치고 constructor/toString 키가 가려지지 않는다', async ({ page }) => {
+  await page.goto('/');
+  const id = await importFixture(page, '11-storage-peer.zip');
+  const f = await openBook(page, id);
+  const r = await f.evaluate(() => {
+    Object.defineProperty(localStorage, 'dp', { value: 'v', configurable: true });
+    localStorage.setItem('constructor', 'c'); localStorage.setItem('toString', 't');
+    return { dp: localStorage.getItem('dp'), c: (localStorage as any).constructor, t: (localStorage as any).toString };
+  });
+  expect(r).toEqual({ dp: 'v', c: 'c', t: 't' });
+  expect(await page.evaluate((i) => localStorage.getItem(`book:${i}:dp`), id)).toBe('v');
+  expect(await page.evaluate(() => localStorage.getItem('dp'))).toBeNull();
+});

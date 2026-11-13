@@ -32,11 +32,15 @@ function wrapStorage(real: Storage, prefix: string): Storage {
     get(_t, k) {
       if (k === 'length') return own().length;
       if (typeof k === 'symbol') return k === Symbol.toStringTag ? 'Storage' : undefined;
-      if (k in api) return api[k];
+      if (Object.hasOwn(api, k)) return api[k];
       return real.getItem(prefix + k) ?? undefined;
     },
     set(_t, k, v) {
       if (typeof k === 'string') real.setItem(prefix + k, String(v));
+      return true;
+    },
+    defineProperty(_t, k, d) {
+      if (typeof k === 'string' && 'value' in d) real.setItem(prefix + k, String(d.value));
       return true;
     },
     deleteProperty(_t, k) {
@@ -61,6 +65,9 @@ export function installGuards(bookId: string): void {
   patch(SWC, 'register', () => Promise.reject(new DOMException('blocked by reader', 'SecurityError')));
   patch(SWC, 'getRegistrations', () => Promise.resolve([]));
   patch(SWC, 'getRegistration', () => Promise.resolve(undefined));
+
+  // ready.then(r => r.unregister()) must not drop the app SW
+  patch((window as any).ServiceWorkerRegistration?.prototype, 'unregister', () => Promise.resolve(false));
 
   // Web storage
   for (const name of ['localStorage', 'sessionStorage'] as const) {
