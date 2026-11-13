@@ -42,3 +42,9 @@ test('isFullDocument', () => {
   expect(isFullDocument(u8('<div>' + 'x'.repeat(2100) + '</div><body>'))).toBe(false);
   expect(isFullDocument(new Uint8Array(0))).toBe(false);
 });
+
+test('isFullDocument: 태그 경계 필요', () => {
+  expect(isFullDocument(u8('<header>x</header>'))).toBe(false);
+  expect(isFullDocument(u8('<headline>x</headline>'))).toBe(false);
+  expect(isFullDocument(u8('<head>'))).toBe(true);
+});

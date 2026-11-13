@@ -62,5 +62,5 @@ export function extractTitle(html: string): string {
 }
 
 export function isFullDocument(bytes: Uint8Array): boolean {
-  return /<(?:!doctype|html|head|body)/i.test(latin1(bytes.subarray(0, 2048)));
+  return /<(?:!doctype|html|head|body)[\s>/]/i.test(latin1(bytes.subarray(0, 2048)));
 }

@@ -15,3 +15,12 @@ test('EUC-KR 문서', () => {
   const b = Uint8Array.from([...new TextEncoder().encode('<meta charset="euc-kr"><p>'), ...encodeEucKr('검색 대상'), ...new TextEncoder().encode('</p>')]);
   expect(extractText(b)).toBe('검색 대상');
 });
+
+test('낱개의 < 는 텍스트를 삼키지 않는다', () => expect(htmlToText('a < b c')).toBe('a < b c'));
+test('낱개의 < 뒤 > 까지 삼키지 않는다', () => expect(htmlToText('a < b <i>c</i> > d')).toBe('a < b c > d'));
+test('~1MB "a<b " 반복은 선형 시간', () => {
+  const s = 'a<b '.repeat(260_000);
+  const t0 = performance.now();
+  htmlToText(s);
+  expect(performance.now() - t0).toBeLessThan(1000);
+});

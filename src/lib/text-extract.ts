@@ -6,7 +6,7 @@ export function htmlToText(html: string): string {
     html
       .replace(/<!--[\s\S]*?(?:-->|$)/g, ' ')
       .replace(/<(script|style|template|noscript)\b[\s\S]*?(?:<\/\1\s*>|$)/gi, ' ')
-      .replace(/<[^>]*>/g, ' '),
+      .replace(/<(?:\/?[a-zA-Z]|[!?])[^<>]*>/g, ' '),
   )
     .replace(/[\s ]+/g, ' ')
     .trim()
