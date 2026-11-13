@@ -176,8 +176,8 @@ DOM 변경(`ResizeObserver` + 지연 재탐지)에 대응하며, 진행률·핸�
 - `<meta name="apple-mobile-web-app-capable" content="yes">`, `apple-mobile-web-app-status-bar-style="black-translucent"`
 - 셸이 **첫 렌더부터** `position: fixed; top: 0; height: env(safe-area-inset-top)` 띠를 둔다(z-index 최상위).
   띠의 배경색은 agent가 보고한 현재 문서의 `body` 배경색(투명하면 `html`, 그것도 투명하면 흰색)으로 맞추고, 페이지 이동 시마다 갱신한다.
-- iframe은 띠 아래부터 배치하지 않고 전체 화면을 쓴다. 문서 내용이 띠에 가려지지 않도록 iframe 상단에 `safe-area-inset-top`만큼 패딩을 둔다.
-  하단도 `safe-area-inset-bottom`을 같은 방식으로 처리한다.
+- iframe은 `top: env(safe-area-inset-top)`부터 `bottom: env(safe-area-inset-bottom)`까지 배치해 문서 내용이 띠나 홈 인디케이터에 가려지지 않게 한다.
+  하단 safe-area 영역도 상단과 같은 방식으로 문서 배경색 띠를 깐다.
 - `theme-color` 메타도 함께 갱신한다(다른 브라우저와 구버전 대응).
 - 초기 페인트 시점에 색이 고정되는 문제가 보고되어 있으므로 실기기 검증 항목으로 둔다(§9).
 
