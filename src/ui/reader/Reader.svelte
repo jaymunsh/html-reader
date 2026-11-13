@@ -14,6 +14,8 @@
   import Panel from './Panel.svelte';
   import IssuesSheet from './IssuesSheet.svelte';
   import FilesTab from './FilesTab.svelte';
+  import SearchPanel from './SearchPanel.svelte';
+  import Sheet from '../Sheet.svelte';
   import { layout } from '../layout.svelte';
   import { createSession, type AgentState } from './session';
   import { isEditableTarget, shortcutFor, type Action } from '../../lib/shortcuts';
@@ -51,8 +53,8 @@
   let dockOpen = $state(false);
   let panelWidth = $state(320); // the user's preference; the applied width is clamped to the window
   let vw = $state(innerWidth);
-  // Leave the desktop top bar at least 460px beside the dock (its controls need ~391px plus badges).
-  const panelMax = $derived(Math.min(480, Math.max(240, vw - 460)));
+  // Leave the desktop top bar at least 560px beside the dock (P3-K10: controls ~391px, badges, collapsed search, bookmark slot).
+  const panelMax = $derived(Math.min(480, Math.max(240, vw - 560)));
   const panelApplied = $derived(Math.min(panelWidth, panelMax));
   let panelReady = $state(false); // the panel renders once its saved state is loaded (no slide-in at boot)
   let btnPanel = $state<HTMLButtonElement>();
@@ -71,7 +73,8 @@
   function closeIssues() {
     issuesOpen = false; issuesHold?.(); issuesHold = null;   // Sheet returns focus to the badge
   }
-  const sheet = $derived((!layout.desktop && sheetOpen) || issuesOpen);
+  let searchOpen = $state(false);
+  const sheet = $derived((!layout.desktop && (sheetOpen || searchOpen)) || issuesOpen);
   let sheetHold: (() => void) | null = null;
   function openSheet() { sheetOpen = true; sheetHold ??= holdOverlay('panel'); }
   function closePanel() {
@@ -80,7 +83,28 @@
     void tick().then(() => btnPanel?.focus());
   }
   function openDock() { dockOpen = true; void setSetting('panelOpen', true).catch(() => {}); }
-  function pick(p: string) { session?.navigate(p); if (!layout.desktop) closePanel(); }
+  function pick(p: string) { nav(p); if (!layout.desktop) closePanel(); }
+
+  // Search (spec §7.1): mobile full-screen sheet / PC top-bar dropdown.
+  let searchHold: (() => void) | null = null;
+  let btnSearch = $state<HTMLButtonElement>();
+  let searchBar = $state<SearchPanel>();
+  function openSearch() {
+    if (layout.desktop) { searchBar?.focus(); return; }
+    searchOpen = true; searchHold ??= holdOverlay('search');
+  }
+  function closeSearch() { searchOpen = false; searchHold?.(); searchHold = null; } // Sheet returns focus to btn-search
+  function onSearchPick(p: string, query: string, snippet: string) {
+    if (!layout.desktop) closeSearch();
+    if (p === path) session?.post({ type: 'find', query, snippet });
+    else nav(p, { find: { query, snippet } });
+  }
+  // A restore bound to the page it was made for (P3-K15): getInit(p) uses it only for that path, and any navigation clears it.
+  let pendingRestore: { path: string; restore: Restore } | null = null;
+  function nav(p: string, restore?: Restore) {
+    pendingRestore = restore ? { path: p, restore } : null;
+    session?.navigate(p);
+  }
 
   export const OVERLAY_HIDE_MS = 3000;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
@@ -116,6 +140,7 @@
     if (layout.desktop === wasDesktop) return;
     wasDesktop = layout.desktop;
     sheetOpen = false; sheetHold?.(); sheetHold = null;
+    searchOpen = false; searchHold?.(); searchHold = null;
     overlayOpen = false; clearTimeout(hideTimer);
     // The frame's width changes, so the text reflows; engines without scroll anchoring (WebKit) would drift. Re-apply the ratio.
     const r = untrack(() => curRatio);
@@ -148,7 +173,7 @@
       flush();
       session?.destroy();
       clearTimeout(hideTimer);
-      sheetHold?.(); issuesHold?.(); focusHold?.();
+      sheetHold?.(); issuesHold?.(); focusHold?.(); searchHold?.();
       clearTimeout(issueTimer);
     };
   });
@@ -204,7 +229,10 @@
       onExternal: (url) => { window.open(url, '_blank', 'noopener'); },
       getInit: (p) => {
         const init: { textScale: number; restore?: Restore } = { textScale: book?.textScale ?? 1 };
-        if (p === firstPath) {
+        const pr = pendingRestore;
+        pendingRestore = null; // used once, and only by the page it was made for
+        if (pr?.path === p) init.restore = pr.restore;
+        else if (p === firstPath) {
           const r = tracker?.get(p)?.lastScrollRatio ?? 0;
           if (r > 0) init.restore = { scrollRatio: r };
         }
@@ -221,7 +249,7 @@
     else { dragHold?.(); dragHold = null; }
   }
   const fileName = $derived(path.split('/').pop() ?? '');
-  const go = (dir: -1 | 1) => { const n = neighbor(pages, path, dir); if (n) session?.navigate(n); };
+  const go = (dir: -1 | 1) => { const n = neighbor(pages, path, dir); if (n) nav(n); };
   const prevPath = $derived(neighbor(pages, path, -1));
   const nextPath = $derived(neighbor(pages, path, 1));
 
@@ -246,19 +274,24 @@
     'next-page': () => go(1),
     'zoom-in': () => zoomBy(1),
     'zoom-out': () => zoomBy(-1),
+    search: openSearch,
     top: () => session?.post({ type: 'scroll-to', ratio: 0 }),
     bottom: () => session?.post({ type: 'scroll-to', ratio: 1 }),
   };
-  function onKey(key: string, mods: Mods) {
-    if (sheet) return; // nothing acts behind a modal sheet; the sheets handle their own Escape
-    const a = shortcutFor(key, mods, { desktop: layout.desktop });
-    if (a) actions[a]?.();
+  /** Returns whether a shortcut handled the key (the shell's own keydown then prevents its default, e.g. `/` typing into the search). */
+  function onKey(key: string, mods: Mods): boolean {
+    if (sheet) return false; // nothing acts behind a modal sheet; the sheets handle their own Escape
+    const a = shortcutFor(key, mods, { desktop: layout.desktop }); // never a Ctrl/⌘/Alt combo (browser find, zoom)
+    const run = a && actions[a];
+    if (!run) return false;
+    run();
+    return true;
   }
   function onWindowKey(e: KeyboardEvent) {
     if (e.defaultPrevented || e.isComposing || e.repeat || isEditableTarget(e.target as Element | null) || notice !== 'none') return;
     // Space on a focused control belongs to that control (its keyup activation), not to the overlay toggle.
     if (e.key === ' ' && (e.target as Element | null)?.closest?.('button, a[href], [role=button], [role=tab], summary')) return;
-    onKey(e.key, { ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey });
+    if (onKey(e.key, { ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey })) e.preventDefault();
   }
 
   async function back() {
@@ -293,8 +326,10 @@
       {/if}
       {#if agent === 'limited'}<span class="badge info" data-testid="limited-badge" role="img" aria-label="제한 모드"><span class="ico"><Icon name="warning" size={16} /></span><span class="full">제한 모드</span></span>{/if}
       {#if !layout.desktop}
+        <button type="button" class="icon-btn" data-testid="btn-search" aria-label="검색" aria-expanded={searchOpen} bind:this={btnSearch} onclick={openSearch}><Icon name="search" /></button>
         <button type="button" class="icon-btn" data-testid="btn-panel" aria-label="파일·북마크" aria-expanded={sheetOpen} bind:this={btnPanel} onclick={openSheet}><Icon name="menu" /></button>
       {:else}
+        <SearchPanel bind:this={searchBar} {bookId} variant="dropdown" onPick={onSearchPick} onClose={() => {}} />
         {@render pn()}
         {#if panelReady && !dockOpen}
           <button type="button" class="icon-btn" data-testid="panel-toggle" aria-label="패널 펼치기" aria-expanded="false" onclick={openDock}><Icon name="panel" /></button>
@@ -310,6 +345,12 @@
     {/snippet}
   </Overlay></div>
   <IssuesSheet open={issuesOpen} issues={missing} onClose={closeIssues} invoker={btnIssues} />
+  {#if !layout.desktop}
+    <!-- WebKit does not focus a clicked button: pass btn-search so focus returns to it on close. -->
+    <Sheet open={searchOpen} onClose={closeSearch} variant="fullscreen" label="검색" testid="search" invoker={btnSearch}>
+      <SearchPanel {bookId} variant="fullscreen" onPick={onSearchPick} onClose={closeSearch} />
+    </Sheet>
+  {/if}
   {#if panelReady}
     <Panel open={panelOpen} bind:tab={panelTab} onClose={closePanel} bind:width={panelWidth} max={panelMax}
       onWidthCommit={(w) => void setSetting('panelWidth', w).catch(() => {})} onEscape={() => iframe?.focus()} blocked={issuesOpen}>

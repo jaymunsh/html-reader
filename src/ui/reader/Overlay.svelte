@@ -47,5 +47,7 @@
   .page-info { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--text-3); white-space: nowrap; }
   .pbar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; pointer-events: none; }
   .pbar i { display: block; width: 100%; height: 100%; background: var(--accent); transform-origin: left; }
-  .actions { display: flex; flex: none; gap: 4px; }
+  /* The actions may shrink only through the PC search input (it opts in); every other control keeps its size. */
+  .actions { display: flex; flex: 0 1 auto; min-width: 0; gap: 4px; }
+  .actions > :global(*) { flex-shrink: 0; }
 </style>

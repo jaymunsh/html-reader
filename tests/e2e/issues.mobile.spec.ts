@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { importFixture, openBook, openOverlay, overlaySettled, settled } from './helpers';
 
-test('320px 상단 바: 뒤로 + 제목 + 쪽 정보 + 배지가 넘치지 않고 컨트롤은 44px 이상', async ({ page }) => {
+test('320px 상단 바: 뒤로 + 제목 + 쪽 정보 + 배지 + 검색이 넘치지 않고 컨트롤은 44px 이상', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto('/');
   const id = await importFixture(page, '08-missing.zip');
@@ -16,9 +16,9 @@ test('320px 상단 바: 뒤로 + 제목 + 쪽 정보 + 배지가 넘치지 않�
     const box = (t: string) => el.querySelector(`[data-testid=${t}]`)!.getBoundingClientRect();
     return {
       overflow: el.scrollWidth > el.clientWidth,
-      right: Math.max(...['issue-badge', 'btn-panel'].map((t) => box(t).right)),
+      right: Math.max(...['issue-badge', 'btn-search', 'btn-panel'].map((t) => box(t).right)),
       barRight: bar.right,
-      hBadge: box('issue-badge').height, wBadge: box('issue-badge').width, wPanel: box('btn-panel').width, wBack: box('reader-back').width,
+      hBadge: box('issue-badge').height, wBadge: box('issue-badge').width, wPanel: box('btn-panel').width, wSearch: box('btn-search').width, wBack: box('reader-back').width,
     };
   });
   expect(r.overflow).toBe(false);
@@ -26,6 +26,7 @@ test('320px 상단 바: 뒤로 + 제목 + 쪽 정보 + 배지가 넘치지 않�
   expect(r.hBadge).toBeGreaterThanOrEqual(44);
   expect(r.wBadge).toBeGreaterThanOrEqual(44);
   expect(r.wPanel).toBeGreaterThanOrEqual(44);
+  expect(r.wSearch).toBeGreaterThanOrEqual(44);
   expect(r.wBack).toBeGreaterThanOrEqual(44);
 });
 
@@ -43,7 +44,7 @@ test('320px: 두 배지가 함께 보여도 모든 컨트롤이 화면 안·44px
   const r = await page.getByTestId('overlay-top').evaluate((el) => {
     const vw = document.documentElement.clientWidth;
     const out: Record<string, { l: number; r: number; w: number; h: number }> = {};
-    for (const t of ['reader-back', 'issue-badge', 'limited-badge', 'btn-panel']) {
+    for (const t of ['reader-back', 'issue-badge', 'limited-badge', 'btn-search', 'btn-panel']) {
       const b = el.querySelector(`[data-testid=${t}]`)!.getBoundingClientRect();
       out[t] = { l: b.left, r: b.right, w: b.width, h: b.height };
     }

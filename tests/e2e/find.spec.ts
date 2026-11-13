@@ -166,3 +166,21 @@ test('내부 스크롤러 + textScale 1.5에서도 일치를 화면에 보인다
   await send(page, { type: 'find', query: '문단 150', snippet: '문단 150 이것은' });
   await expect.poll(() => inView(f, '#p150')).toBe(true);
 });
+
+test('find가 진행 중인 applyRestore(scrollRatio) 재적용을 이긴다 (Task 2 carry)', async ({ page }) => {
+  await page.goto('/');
+  const id = await importFixture(page, 'search.zip');
+  const f = await openBook(page, id);
+  // Restore to 90%, find the top hit at once, then grow the page while the restore loop still re-applies on resize.
+  await page.evaluate(() => {
+    const w = (document.querySelector('[data-testid=reader-frame]') as HTMLIFrameElement).contentWindow as Window & typeof globalThis;
+    const post = (m: object) => w.postMessage({ app: 'html-reader', protocolVersion: 1, ...m }, location.origin);
+    post({ type: 'init', textScale: 1, restore: { scrollRatio: 0.9 } });
+    post({ type: 'find', query: '고래', snippet: '첫 번째 고래 이야기' });
+    w.setTimeout(() => w.document.body.insertAdjacentHTML('beforeend', '<div style="height:3000px"></div>'), 200);
+  });
+  await expect.poll(() => inView(f, '#p30')).toBe(true);
+  await page.waitForTimeout(900); // past the resize and the restore's 500ms quiet window
+  expect(await inView(f, '#p30')).toBe(true);
+  expect(await errs(f)).toEqual([]);
+});

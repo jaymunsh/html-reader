@@ -45,9 +45,11 @@ export function onUserInput(cb: () => void): () => void {
   return off;
 }
 
-export function applyRestore(getScroller: () => Element, ratio: number): void {
+// Returns a stop function: a later find cancels the re-applying (the find wins).
+export function applyRestore(getScroller: () => Element, ratio: number): () => void {
   const apply = () => scrollToRatio(getScroller(), ratio);
   apply();
   const stop = settle(apply, () => off());
   const off = onUserInput(stop);
+  return stop;
 }

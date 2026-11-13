@@ -55,6 +55,9 @@ function start(): void {
 
   send({ type: 'ready', path: bookPath(), title: document.title });
 
+  let stopRestore = () => {};
+  const find = (query: string, snippet: string) => { const ok = findAndReveal(query, snippet); if (ok) stopRestore(); return ok; };
+
   addEventListener('message', (e) => {
     if (e.source !== parent || e.origin !== location.origin) return;
     const p = parseShellMessage(e.data);
@@ -68,7 +71,7 @@ function start(): void {
       requestAnimationFrame(() => scrollToRatio(el, r));
       return;
     }
-    if (p.msg.type === 'find') { findAndReveal(p.msg.query, p.msg.snippet); return; }
+    if (p.msg.type === 'find') { find(p.msg.query, p.msg.snippet); return; }
     if (p.msg.type !== 'init') return;
     const { textScale, restore } = p.msg;
     if (textScale !== currentScale) {
@@ -76,13 +79,13 @@ function start(): void {
       document.documentElement.style.zoom = String(textScale);
     }
     const r = restore && ('scrollRatio' in restore ? restore.scrollRatio : 'bookmark' in restore ? restore.bookmark.scrollRatio : undefined);
-    if (r !== undefined) applyRestore(() => el, r);
+    if (r !== undefined) stopRestore = applyRestore(() => el, r);
     else if (restore && 'find' in restore) {
       const { query, snippet } = restore.find;
-      if (!findAndReveal(query, snippet)) {
+      if (!find(query, snippet)) {
         let touched = false;
         const off = onUserInput(() => { touched = true; });
-        whenStable(() => { off(); if (!touched) findAndReveal(query, snippet); });
+        whenStable(() => { off(); if (!touched) find(query, snippet); });
       }
     }
   });
