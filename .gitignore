@@ -8,3 +8,4 @@ dist-v2/
 public/__reader/
 test-results/
 playwright-report/
+tests/fixtures/big.zip

@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: 'tests/e2e',
+  globalSetup: './tests/e2e/global-setup.ts',
   use: { baseURL: 'http://localhost:4173' },
   webServer: {
     command: 'npm run build && npm run build:v2 && node tests/server/static-server.mjs',
