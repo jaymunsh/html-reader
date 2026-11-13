@@ -3,6 +3,7 @@
   import { cleanupOrphans } from '../lib/storage';
   import Library from './library/Library.svelte';
   import { applyTheme, resolveTheme, setChromeColor } from './chrome';
+  import { applyUpdate, hasWaitingUpdate, watchForUpdate } from './sw-client';
   import Reader from './reader/Reader.svelte';
 
   type Screen = { name: 'library' } | { name: 'reader'; id: string; path: string | null };
@@ -14,6 +15,16 @@
   }
 
   let screen = $state<Screen>(initial());
+  let updateReady = $state(false);
+  onMount(() => watchForUpdate(() => { updateReady = true; }));
+
+  function toLibrary() {
+    clean();
+    screen = { name: 'library' };
+    let wanted = false;
+    try { wanted = sessionStorage.getItem('update-wanted') === '1'; } catch { /* ignore */ }
+    if (hasWaitingUpdate() || wanted) applyUpdate();
+  }
 
   $effect(() => { document.documentElement.dataset.screen = screen.name; setChromeColor(screen.name); });
 
@@ -39,10 +50,10 @@
 
 {#if screen.name === 'reader'}
   {#key screen.id}
-    <Reader bookId={screen.id} openPath={screen.path} onopened={clean} onexit={() => { clean(); screen = { name: 'library' }; }} />
+    <Reader bookId={screen.id} openPath={screen.path} onopened={clean} onexit={toLibrary} />
   {/key}
 {:else}
-  <Library onopen={(id) => (screen = { name: 'reader', id, path: null })} />
+  <Library {updateReady} onapply={applyUpdate} onopen={(id) => (screen = { name: 'reader', id, path: null })} />
 {/if}
 
 <div class="top-inset" data-testid="top-inset" class:reader={screen.name === 'reader'}></div>

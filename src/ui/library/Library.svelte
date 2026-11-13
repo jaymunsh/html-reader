@@ -10,7 +10,7 @@
 
   let books = $state<Book[]>([]);
   let progress = $state(new Map<string, Map<string, PageProgress>>());
-  let { onopen }: { onopen: (id: string) => void } = $props();
+  let { onopen, updateReady = false, onapply }: { onopen: (id: string) => void; updateReady?: boolean; onapply: () => void } = $props();
   let input: HTMLInputElement;
   let flow: ImportFlow;
   let dragging = $state(false);
@@ -105,6 +105,12 @@
 </script>
 
 <main data-testid="library" class:dragging {ondragover} {ondrop} ondragleave={(e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) dragging = false; }}>
+  {#if updateReady}
+    <div class="update" role="status" data-testid="update-banner">
+      <span>업데이트 준비됨</span>
+      <button type="button" data-testid="update-apply" onclick={onapply}>적용</button>
+    </div>
+  {/if}
   <h1>서재</h1>
   <button type="button" data-testid="import-button" onclick={() => input.click()}>가져오기</button>
   <input bind:this={input} type="file" data-testid="import-input" hidden multiple
@@ -147,6 +153,9 @@
   main.dragging { outline: 2px dashed var(--accent); outline-offset: -8px; background: var(--accent-soft); }
   .dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(90vw, 360px);
     padding: 20px; border-radius: var(--r-sheet); background: var(--surface); }
+  .update { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; margin-bottom: 12px;
+    border-radius: var(--r-control); background: var(--info-bg); color: var(--info-fg); }
+  .update button { min-height: 44px; padding: 0 16px; border-radius: var(--r-control); }
   .scrim { position: fixed; inset: 0; z-index: 19; background: var(--scrim); }
   .dialog button { min-height: 44px; border-radius: var(--r-control); margin-right: 8px; }
 </style>
