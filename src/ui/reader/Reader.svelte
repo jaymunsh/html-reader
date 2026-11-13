@@ -7,6 +7,8 @@
   import type { Restore } from '../../lib/protocol';
   import { ensureController, tellSw } from '../sw-client';
   import Overlay from './Overlay.svelte';
+  import RibbonTab from './RibbonTab.svelte';
+  import HintToast from './HintToast.svelte';
   import { layout } from '../layout.svelte';
   import { createSession, type AgentState } from './session';
 
@@ -24,6 +26,9 @@
   let bookPct = $state(0);
   let pages = $state<string[]>([]);
   let showLine = $state(false); // rendered only once the setting has loaded
+  let hint = $state(false); // first-run hint, shown once the setting has loaded as unseen
+  async function dismissHint() { await setSetting('hintSeen', true).catch(() => {}); hint = false; }
+  $effect(() => { if (overlayOpen && hint) void dismissHint(); });
   const pageInfo = $derived(pages.length ? formatPageInfo(pages, path, bookPct) : '');
   const refreshBook = () => { if (book && tracker) bookPct = bookProgress(book.pagePaths, tracker.all()).pct; };
 
@@ -43,6 +48,7 @@
   }
   /** Any interaction with the overlay restarts the idle timer. */
   export const pokeOverlay = arm;
+  const openOverlay = () => { overlayOpen = true; arm(); };
   const onTap = () => { if (layout.desktop) return; overlayOpen = !overlayOpen; arm(); };
 
   let tracker: ProgressTracker | null = null;
@@ -56,6 +62,7 @@
 
   onMount(() => {
     void getSetting('progressLine').then((v) => { showLine = v; }).catch(() => {});
+    void getSetting('hintSeen').then((v) => { hint = !v; }).catch(() => {});
     void open();
     window.addEventListener('pagehide', flush);
     document.addEventListener('visibilitychange', onVisibility);
@@ -146,6 +153,8 @@
   hidden={notice !== 'none'}>
   <iframe bind:this={iframe} data-testid="reader-frame" title="문서"></iframe>
   <div role="presentation" onpointerdown={pokeOverlay}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back} /></div>
+  {#if !layout.desktop && !overlayOpen}<RibbonTab onopen={openOverlay} />{/if}
+  {#if hint && !layout.desktop}<HintToast ondismiss={dismissHint} />{/if}
   {#if showLine}<ProgressLine pct={curPct} hidden={overlayOpen && !layout.desktop} />{/if}
 </div>
 
