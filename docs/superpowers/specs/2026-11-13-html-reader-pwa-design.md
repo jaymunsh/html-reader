@@ -1,6 +1,7 @@
 # HTML Reader PWA — 설계 스펙
 
 - 작성일: 2026-11-13
+- 개정: v2 — 독립 리뷰(Fable) 반영
 - 상태: 사용자 검토 대기
 
 ## 1. 목적과 범위
@@ -13,13 +14,14 @@ PC(macOS·Windows)와 모바일(iOS·Android)에서 **일반 브라우저와 동
 
 ### 성공 기준
 1. ZIP 안의 여러 HTML 페이지 사이 링크 이동, `fetch()`로 JSON 로드, ES module import,
-   CSS `url()`/`@font-face`가 원본 그대로 동작한다.
+   CSS `url()`/`@font-face`가 원본 그대로 동작한다. 루트 절대경로(`/css/a.css`)와 EUC-KR 문서도 동작한다.
 2. 페이지별 읽기 진행률과 이어 읽기가 동작한다.
 3. 긴 문서에서 목차·빠른 스크롤로 원하는 위치를 쉽게 찾는다.
 4. 평상시 리더 UI는 문서 공간을 차지하지 않는다.
 5. iOS 26 홈 화면 앱에서 상단 상태바 영역이 문서와 자연스럽게 이어진다(의도치 않은 blur·겹침 없음).
+   구체적인 구현 방식은 P0 실기기 스파이크에서 확정한다(§12).
 6. 최초 1회 접속 후 완전 오프라인으로 동작한다.
-7. 문서 전체 텍스트 검색, 북마크, 글자 크기 조절, 수정본 재가져오기 등 편의 기능이 동작한다(§7).
+7. 문서 전체 텍스트 검색, 북마크, 글자 크기 조절, 수정본 재가져오기, 문서명 수정, 서재 검색·정렬, 바로 열기 연동이 동작한다(§7).
 
 ### 범위 밖 (명시적 제외)
 - 기기 간 동기화(서버 필요) — 문서와 진행률은 각 기기에만 저장된다.
@@ -27,16 +29,32 @@ PC(macOS·Windows)와 모바일(iOS·Android)에서 **일반 브라우저와 동
 - 폴더 직접 선택, URL로 불러오기 — 가져오기는 ZIP과 단일 HTML 파일만 지원.
 - 강제 다크모드, 하이라이트(임의 HTML에서 품질이 불안정함).
 - 설치 폰트를 이름으로만 참조하는 문서의 감지·대체.
+- 가져오기 시점의 정적 참조 검사 — 누락 리소스는 읽는 중 실제 요청 결과로만 보고한다(§6.2).
+- ZIP 파일명 인코딩 중 UTF-8·CP949 외(Shift-JIS 등), 암호화 ZIP, Deflate64 압축.
+- 해시 라우팅 SPA 문서의 화면 단위 진행률 — 이런 문서는 HTML 파일 1개 = 페이지 1개로만 추적한다.
 - 네이티브 래퍼(Capacitor/Tauri), 앱스토어 배포.
-- 문서 간 격리 보안(§9 참조).
+- 문서 간 완전한 보안 격리(§9.4 참조).
 
 ## 2. 플랫폼·배포
 
 - 정적 호스팅(Vercel 등)에 배포, 서버 코드 없음. HTTPS 필수(Service Worker 조건).
 - 문서는 서버로 업로드되지 않고 기기 내부에만 저장된다.
 - 지원 대상: Chrome/Edge(Windows·macOS), Safari(macOS), iOS 26 Safari 및 홈 화면 앱, Android Chrome.
-- iOS는 Safari 탭 사용 시 장기 미사용 데이터 삭제 정책이 있으므로 **홈 화면 추가 사용을 전제**로
-  최초 실행 시 안내 화면을 표시하고, `navigator.storage.persist()`를 요청한다.
+- 매니페스트: `display: standalone`, `start_url: /`, `scope: /`, `theme_color`, `background_color`.
+  `mobile-web-app-capable` 메타를 둔다. `apple-mobile-web-app-capable`은 deprecated이므로 보조로만 병기한다.
+
+### 2.1 iOS 저장소
+- iOS에서 **Safari 탭과 홈 화면 앱은 저장소가 분리**되어 있다. Safari에서 가져온 문서는 홈 화면 앱에서 보이지 않는다.
+- Safari 탭 저장소는 장기간 미사용 시 삭제될 수 있다. 홈 화면 앱은 이 정책에서 제외된다.
+- 따라서 iOS Safari 탭(비 standalone)에서 가져오기를 누르면 **먼저 홈 화면 추가 안내**를 보여준다.
+  "탭에서 계속"을 고르면 "임시 보관 — 홈 화면 앱에서는 보이지 않으며 지워질 수 있음" 경고를 띄우고 진행한다.
+- 모든 플랫폼에서 첫 가져오기 시 `navigator.storage.persist()`를 요청하고, `persisted()` 결과를 설정 화면에 표시한다.
+
+### 2.2 호스팅 폴백
+SW가 아직 제어하지 않는 상태에서 `/book/*` 요청이 호스트로 나가면 앱 셸이 iframe 안에 다시 로드되는 문제가 생긴다.
+- 호스팅 설정(`vercel.json`)에서 `/book/*`를 `/__app/no-sw.html`로 rewrite한다.
+  이 페이지는 최상위 창이면 `/`로 이동하고, iframe 안이면 부모에 `no-sw` 메시지를 보내는 최소 페이지다.
+- 그 밖의 경로는 `/`(앱)로 rewrite한다.
 
 ## 3. 기술 스택
 
@@ -45,30 +63,33 @@ PC(macOS·Windows)와 모바일(iOS·Android)에서 **일반 브라우저와 동
 | 빌드 | Vite + TypeScript | 표준, 빠른 빌드 |
 | UI | Svelte 5 | 런타임이 작아 초기 로딩에 유리 |
 | PWA | `vite-plugin-pwa` (injectManifest) | 앱 셸 프리캐시 + 커스텀 SW 로직 |
-| ZIP | `fflate` (스트리밍 `Unzip`) | 작고 빠르며 스트리밍 해제 지원 |
+| ZIP | 자체 중앙 디렉터리 파서 + `fflate`의 `Inflate`(동기 스트림) | 임의 접근으로 정확한 용량·진행률, 엔트리별 메모리 상한 |
 | 단위 테스트 | Vitest | |
-| E2E | Playwright (Chromium, WebKit) | |
+| E2E | Playwright (Chromium, WebKit) | Playwright WebKit은 iOS Safari가 아니므로 iOS 고유 동작은 실기기로 검증(§11.3) |
+
+앱 자체 정적 자산(JS·CSS·아이콘·매니페스트)은 문서의 루트 절대경로와 겹치지 않도록 **모두 `/__app/` 아래**에 둔다.
+reader-agent는 `/__reader/agent.js`에 둔다. 앱 HTML은 `/`(=`/index.html`)만 쓴다.
 
 ## 4. 아키텍처
 
 ```
-┌─ 리더 셸 (앱 UI, 최상위 문서) ─────────────────────┐
-│ 서재 화면 / 리더 화면 / 오버레이 / 목차·페이지 패널 │
-│        ▲ postMessage (위치·목차·탭·누락 리소스)     │
-│  ┌─ iframe: /book/<id>/<entry>.html ────────────┐  │
-│  │  원본 HTML + SW가 주입한 reader-agent.js       │  │
+┌─ 리더 셸 (앱 UI, 최상위 문서 /) ────────────────────┐
+│ 서재 화면 / 리더 화면 / 오버레이 / 패널            │
+│        ▲ postMessage (protocolVersion 포함)          │
+│  ┌─ iframe: /book/<id>/<path> ──────────────────┐  │
+│  │  원본 HTML + SW가 주입한 /__reader/agent.js    │  │
 │  └───────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────┘
         │ 모든 네트워크 요청
 ┌─ Service Worker ────────────────────────────────────┐
-│ /book/<id>/...      → Cache Storage에서 파일 응답     │
-│ HTML 응답            → reader-agent 스크립트 태그 주입  │
-│ 앱 셸               → 프리캐시                        │
+│ 요청 주체 판별 → book 매핑/리다이렉트 → 파일 응답    │
+│ 네비게이션 HTML에만 agent 주입(바이트 단위)          │
+│ 404·외부 요청 기록, Range 처리, 앱 셸 프리캐시        │
 └─────────────────────────────────────────────────────┘
-┌─ Import Worker ─┐   ┌─ 저장소 ───────────────────────────┐
-│ ZIP 스트리밍 해제 │ → │ Cache Storage: 파일 본문(Response) │
-└─────────────────┘   │ IndexedDB: 문서 메타·진행률·누락 목록 │
-                      └────────────────────────────────────┘
+┌─ Import Worker ─────────┐   ┌─ 저장소 ─────────────────────────┐
+│ 중앙 디렉터리 읽기 →     │ → │ Cache Storage: 파일 본문          │
+│ 엔트리별 slice+Inflate   │   │ IndexedDB: 메타·진행률·북마크 등  │
+└─────────────────────────┘   └──────────────────────────────────┘
 ```
 
 ### 4.1 컴포넌트
@@ -77,66 +98,142 @@ PC(macOS·Windows)와 모바일(iOS·Android)에서 **일반 브라우저와 동
 
 | 단위 | 책임 | 의존 |
 |---|---|---|
-| `importer` (Worker) | ZIP 스트리밍 해제, 파일명 디코딩, 저장, 진행률 보고, 실패 시 롤백 | fflate, `storage` |
-| `storage` | Cache Storage(파일)·IndexedDB(메타/진행률) 접근 API | 없음 |
-| `path` | URL ↔ 문서 내 경로 정규화, 루트 절대경로 매핑, 디렉터리 index 해석 | 없음(순수 함수) |
+| `zip` | EOCD·ZIP64·중앙 디렉터리 파싱, 엔트리 메타 반환, 엔트리 바이트 스트림 제공(STORED는 slice, DEFLATE는 Inflate) | fflate |
+| `filename` | 엔트리 파일명 디코딩(Unicode extra field → UTF-8 플래그 → UTF-8 fatal → CP949), NFC 정규화, 정크 판정 | 없음(순수 함수) |
+| `importer` (Worker) | 용량 사전 검사, 엔트리 저장, 시작 페이지·문서 페이지 판정, 텍스트 추출 호출, 진행률 보고, 원자적 커밋 | `zip`, `filename`, `html-meta`, `text-extract`, `storage` |
+| `html-meta` | HTML 바이트에서 인코딩 판정, `<title>` 추출, 완전한 문서인지(조각인지) 판정 | 없음(순수 함수) |
+| `text-extract` | HTML → 검색용 평문(Worker에서 동작, DOM 불필요) | `html-meta` |
+| `storage` | Cache Storage·IndexedDB 접근 API, 스키마 마이그레이션, 고아 캐시 정리 | 없음 |
+| `path` | 요청 URL → 문서 내 경로 정규화, 탈출 판정, 디렉터리 해석 | 없음(순수 함수) |
 | `mime` | 확장자 → Content-Type | 없음(순수 함수) |
-| `sw` | 요청 라우팅, 파일 응답, Range 처리, HTML 주입, 404 기록 | `path`, `mime`, `storage` |
-| `reader-agent` | iframe 내부: 스크롤 컨테이너 탐지, 진행률, 탭 판별, 목차 추출, 현재 섹션 추적, 배경색 보고 | 없음(셸과 postMessage) |
+| `range` | Range 헤더 파싱 → 206/416 응답 생성 | 없음 |
+| `inject` | HTML 바이트에 agent 스크립트 태그 삽입 | 없음(순수 함수) |
+| `sw` | 요청 주체 판별, 라우팅, 리다이렉트, 파일 응답, 리소스 이슈 기록, 업데이트 수명주기 | `path`, `mime`, `range`, `inject`, `storage` |
+| `reader-agent` | iframe 내부: 가드 설치, 스크롤 컨테이너 탐지, 진행률, 탭 판별, 목차, 섹션 추적, 배경색 보고, 검색 위치 찾기, 키 전달, 링크 정규화 | 없음(셸과 postMessage) |
+| `protocol` | 셸 ↔ agent 메시지 타입 정의와 검증(공유 모듈) | 없음 |
 | `progress` | 페이지별/문서별 진행률 계산·디바운스 저장 | `storage` |
-| `scanner` | 가져오기 시 HTML/CSS 참조 스캔 → 누락 리소스 목록 | `path` |
-| `text-extract` | 가져오기 시 HTML → 검색용 평문 추출(Worker에서 동작, DOM 불필요) | 없음(순수 함수) |
 | `search` | 문서 전체 검색, 결과 스니펫 생성 | `storage` |
-| `launch` | 파일 연결 열기(`launchQueue`)·공유 대상(share target) 수신 → `importer` 호출 | `importer` |
-| UI(Svelte) | 서재, 리더, 오버레이, 패널, 안내 화면 | 위 단위들 |
+| `launch` | `launchQueue`·share target 수신 → `importer` 호출 (P4) | `importer` |
+| UI(Svelte) | 서재, 리더, 오버레이, 패널, 안내·설정 화면 | 위 단위들 |
 
 ### 4.2 데이터 모델
 
-**Cache Storage** — 캐시 이름 `book-<id>`, 키 `/book/<id>/<정규화된 경로>`, 값 `Response(blob, {Content-Type})`.
+**Cache Storage** — 캐시 이름은 `books.cacheName`(예: `book-<id>-v<n>`), 키 `/book/<id>/<저장 경로>`, 값 `Response(blob, {Content-Type, Content-Length})`.
+저장 경로는 NFC 정규화된 ZIP 내 경로(문서 루트 기준)다. 대용량 미디어의 저장 방식은 P0 스파이크 결과에 따라 확정한다(§12).
 
-**IndexedDB `html-reader`**
-- `books`: `{ id, title, sourceName, entryPath, htmlPaths[], fileCount, totalBytes, importedAt, lastOpenedAt, lastPath, fontScale, hasExternalRefs, missing[] }`
+**IndexedDB `html-reader`** (스키마 버전을 두고 `onupgradeneeded`에서 단계별로 마이그레이션한다)
+- `books`: `{ id, title, sourceName, cacheName, entryPath, pagePaths[], fileCount, totalBytes, importedAt, lastOpenedAt, lastPath, textScale }`
   - `title`: 화면에 보이는 문서명. 사용자가 수정할 수 있다(§7.7).
   - `sourceName`: 가져온 파일명(확장자 제외). 재가져오기 매칭에만 쓰며 이름을 바꿔도 변하지 않는다.
-  - `fontScale`: 문서별 글자 크기 배율(기본 1.0).
+  - `cacheName`: 현재 유효한 캐시를 가리키는 포인터. 교체 시 이 값만 원자적으로 바꾼다.
+  - `pagePaths`: **완전한 HTML 문서**인 파일 목록(조각 HTML 제외, §4.3). 진행률 분모와 페이지 목록·이전/다음의 기준이다.
+  - `textScale`: 문서별 글자 크기 배율(기본 1.0, §7.4).
+- `bookFiles`: 키 `bookId`, `{ paths[] }` — 저장된 전체 경로. SW의 대소문자 무시 조회·디렉터리 판정에 쓴다.
 - `progress`: 키 `[bookId, path]`, `{ maxPct (0–100), lastScrollRatio (0–1), read (boolean), updatedAt }`
   - 위치는 px가 아니라 **비율**로 저장한다. 글자 크기나 화면 폭이 바뀌어도 대략 같은 위치로 복귀하기 위해서다.
 - `bookmarks`: `{ id, bookId, path, scrollRatio, sectionTitle, createdAt }`
 - `texts`: 키 `[bookId, path]`, `{ text }` — 검색용 평문
+- `issues`: 키 `[bookId, path]`, `{ kind: 'missing' | 'outside-root' | 'external', count, lastSeen }` — SW가 기록. 레코드 단위로 쓰므로 동시 기록에도 유실이 없다.
+- `settings`: 키-값 — 서재 정렬, 진행선 표시 여부, `activeBookId`(SW 폴백용, §5.1) 등
 
-### 4.3 주요 흐름
+### 4.3 가져오기 흐름
 
-**가져오기**
-1. 사용자가 ZIP 또는 단일 `.html/.htm` 파일을 선택한다. PC에서는 드래그앤드롭도 가능하고, Android/PC는 파일 연결·공유로 들어올 수도 있다(§7.5).
-   단일 HTML은 "파일 1개짜리 묶음"으로 취급하며 이후 흐름은 동일하다.
+1. 사용자가 ZIP 또는 단일 `.html/.htm` 파일을 선택한다. PC에서는 드래그앤드롭도 가능하다. P4에서는 파일 연결·공유로도 들어온다(§7.5).
+   iOS Safari 탭이면 먼저 §2.1의 안내를 거친다.
    `sourceName`이 같은 문서가 이미 있으면 "기존 문서 교체 / 새 문서로 추가"를 묻는다(§7.2).
-2. `storage.estimate()`로 여유 공간 확인. ZIP 크기의 약 2배가 부족하면 중단하고 안내.
-3. Import Worker가 `File.stream()` → fflate `Unzip`으로 파일 단위 해제, 각 파일을 즉시 Cache Storage에 저장. UI에 진행률 표시.
-4. 시작 페이지 결정: 루트 `index.html` → 단일 최상위 폴더 안의 `index.html` → 없으면 HTML 목록에서 사용자가 선택.
-   단일 최상위 폴더면 그 폴더를 문서 루트로 삼는다.
-5. `scanner`가 HTML/CSS 참조를 스캔해 누락 목록과 외부 리소스 여부를 기록하고, `text-extract`가 HTML별 검색용 평문을 `texts`에 저장한다.
-6. `books` 레코드 작성으로 완료. 도중에 실패하면 해당 캐시와 레코드를 삭제(롤백).
+2. 단일 HTML은 "파일 1개짜리 묶음"으로 취급하며 이후 흐름은 동일하다.
+3. **중앙 디렉터리 읽기**: `file.slice()`로 EOCD(필요시 ZIP64 EOCD)와 중앙 디렉터리를 읽어 엔트리 목록을 만든다.
+   - 파일명을 디코딩하고 NFC 정규화한다(`filename`). 백슬래시는 `/`로 바꾼다.
+   - 정크 엔트리(`__MACOSX/`, `.DS_Store`, `Thumbs.db`, `desktop.ini`, `._*`)와 디렉터리 엔트리는 제외한다.
+   - 단일 최상위 폴더만 남으면 그 폴더를 문서 루트로 삼는다.
+   - 암호화 엔트리나 지원하지 않는 압축 방식(Deflate64 등)이 있으면 가져오기를 중단하고 원인을 안내한다.
+4. **사전 검사**: 압축 해제 후 총 크기를 정확히 안다. 다음을 확인한다.
+   - `storage.estimate()`의 여유 공간이 (해제 총량 × 1.2)보다 적으면 중단한다.
+   - zip bomb 방지: 해제 총량이 4GB를 넘거나 엔트리 압축률이 1000:1을 넘으면 중단한다.
+   - HTML이 하나도 없으면 거부한다.
+5. **엔트리 저장**: 엔트리마다 `slice(offset, offset+compSize).stream()`을 STORED면 그대로, DEFLATE면 `Inflate`에 통과시켜 Blob으로 모은 뒤
+   `cache.put`을 **await**하고 다음 엔트리로 넘어간다(백프레셔). 진행률은 처리한 바이트 / 해제 총량으로 보고한다.
+   CRC32를 검증해 불일치하면 중단한다.
+6. **HTML 분석**(`html-meta`): HTML 파일마다 앞부분 바이트로 인코딩을 판정한다(BOM → `<meta charset>`/`http-equiv` → UTF-8 fatal → EUC-KR).
+   - 처음 2KB 안에 doctype, `<html`, `<head`, `<body` 중 하나라도 있으면 **완전한 문서**로 보고 `pagePaths`에 넣는다. 아니면 조각으로 본다.
+   - `text-extract`가 평문을 만들어 `texts`에 저장한다.
+7. **시작 페이지**: 루트 `index.html`(또는 `index.htm`) → `pagePaths`가 1개면 그것 → 아니면 목록에서 사용자가 선택.
+8. **기본 문서명** 결정과 중복 접미사 부여(§7.7).
+9. **원자적 커밋**: 모든 파일을 `book-<id>-v<n>` 캐시에 쓴 뒤 **하나의 IndexedDB 트랜잭션**으로 `books`·`bookFiles`·`texts`를 기록한다.
+   이 트랜잭션이 끝나야 문서가 서재에 나타난다.
+10. 실패하면 해당 캐시를 삭제한다. 탭 종료 등으로 정리 코드가 실행되지 못해도, **앱 시작 시** `books.cacheName`이 가리키지 않는 `book-*` 캐시와
+    고아 `texts`·`bookFiles`를 정리한다.
 
-**읽기**
-1. 리더 화면이 iframe에 `/book/<id>/<lastPath 또는 entryPath>` 로드.
-2. SW가 Cache Storage에서 응답한다. HTML이면 `<head>` 직후에 `<script src="/__reader/agent.js"></script>`를 주입한다.
-3. agent가 셸에 `ready{path, title, bgColor, outline}`을 보내고, 스크롤 시 `scroll{pct}`, 탭 시 `tap`, 섹션 변경 시 `section{id}`를 보낸다.
-4. 셸이 진행률을 갱신하고(1초 디바운스, `pagehide` 시 즉시 저장), 상단 띠 색을 `bgColor`로 맞춘다.
-5. 이어 읽기: 문서를 열면 `lastPath`를 로드하고 agent에 `setFontScale{scale}`, `restore{scrollRatio}`를 순서대로 보낸다.
+### 4.4 읽기 흐름
 
-## 5. Service Worker 라우팅 규칙
+1. **SW 준비 확인**: 리더에 들어가기 전에 `navigator.serviceWorker.ready`를 기다리고 `controller`가 있는지 확인한다(SW는 `clients.claim()` 사용).
+   없으면 한 번 새로고침한다. 그래도 없거나 SW를 지원하지 않는 환경(일부 사생활 보호 모드 등)이면 "이 환경에서는 문서를 열 수 없음" 안내를 띄운다.
+2. 셸이 `settings.activeBookId`를 기록하고 SW에도 메시지로 알린다. iframe에 `/book/<id>/<lastPath 또는 entryPath>`를 로드한다.
+3. SW가 파일로 응답하고, 네비게이션 HTML이면 agent를 주입한다(§5.4).
+4. **핸드셰이크**(§6.7): agent `ready` → 셸 `init{textScale, restore?}` → agent가 적용 후 보고 시작.
+5. agent는 스크롤 시 `scroll{pct, ratio}`, 탭 시 `tap`, 섹션 변경 시 `section{id}`, 키 입력 시 `key{...}`를 보낸다.
+6. iframe 안에서 페이지를 이동하면 새 페이지의 `ready`가 온다. 셸은 그때 `lastPath`를 갱신하고 상단 색을 다시 맞춘다.
+7. 셸이 진행률을 갱신한다(메모리 갱신 + 1초 디바운스 저장, `pagehide`·`visibilitychange(hidden)` 시 즉시 저장).
 
-1. `/book/<id>/<path>`: 경로를 정규화(퍼센트 디코딩, `.`/`..` 처리, 루트 밖 탈출 차단)한 뒤 Cache Storage에서 조회.
-   - 경로가 `/`로 끝나거나 디렉터리면 `<path>/index.html`로 응답.
-   - 없으면 404 응답(간단한 안내 HTML)을 보내고 `missing` 기록을 갱신.
-2. **루트 절대경로** (`/css/a.css` 등, 앱 경로가 아닌 요청): `event.clientId`로 요청한 클라이언트 URL을 조회한다.
-   클라이언트가 `/book/<id>/` 아래 문서라면 `/book/<id>/css/a.css`로 매핑한다.
-   네비게이션 요청이라 clientId가 없으면 `resultingClientId`/Referer로 판별한다.
-3. **Range 요청**(동영상·오디오, iOS 필수): `206 Partial Content`와 `Content-Range`를 직접 생성한다.
-4. **외부 출처 요청**: 그대로 네트워크로 통과시킨다(오프라인이면 실패, 서재에 경고 아이콘).
-5. 앱 셸·`/__reader/*`: 프리캐시에서 응답.
+## 5. Service Worker 라우팅
 
-MIME은 `mime` 단위에서 결정한다. `woff2/woff/ttf/otf`, `mjs`, `json`, `svg`, `wasm`, 미디어 형식을 반드시 정확히 지정한다.
+### 5.1 요청 주체 판별
+요청마다 먼저 "어느 문서(book)의 맥락인가"를 정한다.
+- **서브리소스 요청**: `clients.get(event.clientId)`의 URL이 `/book/<id>/` 아래면 그 `<id>`다.
+- **iframe/frame 네비게이션**(`request.mode === 'navigate'`, `destination`이 `iframe`·`frame`): 대상 URL이 `/book/<id>/` 아래면 그 `<id>`다.
+  아니면 `request.referrer`가 `/book/<id>/` 아래인지 본다.
+- **폴백**: 위로 판별되지 않으면(`no-referrer` 문서, Worker·`blob:`·`about:srcdoc` 클라이언트 등) `settings.activeBookId`를 쓴다.
+  SW는 유휴 시 종료되므로 이 값은 메모리가 아니라 IndexedDB에서 읽는다(읽은 값은 SW 생존 동안만 캐시한다).
+
+### 5.2 라우팅 순서
+1. `/__reader/*`: 항상 프리캐시에서 응답한다.
+2. **최상위 창 네비게이션**(`destination === 'document'`)이 `/book/<id>/<path>`를 향하면(새 탭에서 열기, `window.open`, 프레임 탈출 등)
+   `302 → /?open=<id>&path=<path>`로 보낸다. 리더가 그 문서를 다시 감싸서 연다.
+3. **book 맥락의 같은 출처 요청 중 `/book/` 밖을 향하는 것**(루트 절대경로: `/`, `/css/a.css`, `/assets/x.js`, `/favicon.ico` 등):
+   - 네비게이션이면 `302 → /book/<id>/<path>`로 리다이렉트한다. 그래야 새 페이지의 URL이 `/book/<id>/` 아래에 남아 상대경로와 이후 판별이 유지된다.
+   - 서브리소스면 리다이렉트 없이 `/book/<id>/<path>`의 내용으로 바로 응답한다.
+   - 앱 경로(`/`, `/__app/*`)와 이름이 겹쳐도 **book 맥락이면 항상 book 쪽으로 매핑**한다. 예외는 `/__reader/*`뿐이다.
+4. `/book/<id>/<path>`: §5.3 규칙으로 조회해 응답한다.
+5. **book 맥락의 다른 출처 요청**: 그대로 네트워크로 통과시키고 `issues`에 `external`로 기록한다(오프라인이면 실패).
+6. 그 외(앱 자신의 요청): `/`, `/index.html`, `/__app/*`는 프리캐시에서 응답한다. 다른 최상위 네비게이션은 앱 `/`로 응답한다.
+
+### 5.3 경로 정규화와 조회
+1. 쿼리스트링과 해시를 제거한다(`a.css?v=3` → `a.css`).
+2. 퍼센트 디코딩, 백슬래시 → `/`, NFC 정규화를 한다.
+3. `.`·`..`를 해석한다. 문서 루트 밖으로 나가면 404를 응답하고 `outside-root`로 기록한다.
+4. 정확히 일치하는 키로 조회한다. 없으면 `bookFiles.paths`에서 **대소문자 무시**로 찾는다(Windows에서 만든 `Logo.PNG` 참조 대응).
+5. 디렉터리 처리: 경로가 `/`로 끝나면 `index.html` → `index.htm` 순으로 찾는다.
+   슬래시 없이 디렉터리를 가리키면(`sub`) `301 → sub/`로 보내 상대경로 기준을 맞춘다.
+6. 없으면 404를 응답한다. 네비게이션이면 "이 페이지는 묶음에 없습니다" 안내 HTML을 보낸다.
+   무시 목록(`favicon.ico`, `*.map`, `apple-touch-icon*`, `robots.txt`)이 아니면 `missing`으로 기록한다.
+
+### 5.4 HTML 주입
+- **네비게이션 요청**(`mode === 'navigate'`)이고 Content-Type이 `text/html` 또는 `application/xhtml+xml`일 때만 주입한다.
+  `fetch()`/XHR로 읽는 HTML 조각에는 절대 주입하지 않는다.
+- 바이트를 디코딩·재인코딩하지 않고 **바이트 단위로 삽입**한다. 삽입 위치는 처음 4KB 안에서 다음 순서로 찾는다.
+  1. `<head ...>` 여는 태그 직후
+  2. `<html ...>` 여는 태그 직후
+  3. doctype 직후
+  4. 위가 모두 없으면 맨 앞(단, BOM 뒤)
+
+  주석(`<!-- -->`) 안의 일치는 건너뛴다. doctype 앞에는 절대 넣지 않는다(quirks mode 유발).
+- 삽입 내용은 ASCII로 된 `<script src="/__reader/agent.js" data-book="<id>" data-scale="<textScale>"></script>`다.
+  XHTML에서도 유효한 형태다. UTF-16 문서(BOM으로 판별)는 UTF-16으로 인코딩해 넣는다.
+  `data-scale`은 첫 페인트 전에 글자 크기를 적용해 깜빡임을 없애기 위한 것이다.
+- 삽입으로 `<meta charset>`이 문서의 처음 1024바이트 밖으로 밀리면 브라우저의 인코딩 프리스캔이 실패한다. 이 경우 `meta charset` 태그 **뒤**에 넣는다.
+- 문서의 CSP(`<meta http-equiv="Content-Security-Policy">`)가 agent를 차단할 수 있다. 이 경우를 위해 agent 없는 모드를 둔다(§6.7).
+
+### 5.5 Range 요청
+- 동영상·오디오에서 Safari는 Range 응답이 필수다. 다음을 지원한다.
+  - `bytes=a-b`, `bytes=a-`(열린 범위), `bytes=-n`(마지막 n바이트)
+  - 응답: `206`, `Content-Range: bytes a-b/total`, `Content-Length`, `Accept-Ranges: bytes`, 정확한 Content-Type
+  - 범위를 벗어나면 `416`과 `Content-Range: bytes */total`
+  - 다중 범위는 첫 범위만 응답한다.
+- Range가 없는 미디어 요청에도 `Accept-Ranges: bytes`를 붙인다.
+
+### 5.6 MIME
+`mime` 단위가 결정한다. `html/htm`, `xhtml`, `css`, `js/mjs`(`text/javascript`), `json`, `svg`, `wasm`, `woff2/woff/ttf/otf`,
+이미지·미디어 형식을 반드시 정확히 지정한다. 모르는 확장자는 `application/octet-stream`.
 
 ## 6. 리더 UI
 
@@ -148,21 +245,24 @@ MIME은 `mime` 단위에서 결정한다. `woff2/woff/ttf/otf`, `mjs`, `json`, `
 - **원터치 시**: 다음 요소들을 표시한다.
   - 상단 바: ◀ 서재, 문서명, `p.3/12`, 🔍, 🔖, ☰
   - 진행 바: 현재 페이지의 %
-  - 글자 크기: `가-` `가+` (하단 바)
   - 빠른 스크롤 핸들: 우측 가장자리. 드래그하면 현재 섹션 제목을 말풍선으로 표시
-  - 하단 바: ⤒ 맨 위, ◀ 이전 페이지, 다음 페이지 ▶, ⤓ 맨 아래
+  - 하단 바: ⤒ 맨 위, ◀ 이전 페이지, `가-` `가+`, 다음 페이지 ▶, ⤓ 맨 아래
 
   다시 탭하거나 3초 동안 조작이 없으면 숨긴다(드래그·패널 사용 중에는 숨기지 않음).
 - **☰ 패널**: 목차·페이지·북마크 탭으로 구성한다. 모바일은 바텀시트, PC는 우측 사이드 패널로 표시한다.
   - 목차: 현재 페이지의 h1–h4. 누르면 해당 위치로 이동하고, 현재 섹션을 강조한다.
-  - 페이지: `htmlPaths` 목록과 각 페이지 상태(`✓ 읽음 / 45% / 안 읽음`). 누르면 이동한다.
+  - 페이지: `pagePaths` 목록과 각 페이지 상태(`✓ 읽음 / 45% / 안 읽음`). 누르면 이동한다.
   - 북마크: §7.3
-- **🔍 검색 패널**: §7.1. ☰ 패널과 같은 형태(바텀시트/사이드 패널)로 표시한다.
-- 이전/다음 페이지 순서는 `htmlPaths`의 경로 자연 정렬 순서를 따른다.
-- **PC 단축키**: `Space`(오버레이 토글), `T`(목차), `/`(검색), `B`(북마크 추가), `[`/`]`(이전/다음 페이지), `Home`/`End`, `Ctrl/⌘ +`·`-`(글자 크기).
-  단, 문서 안의 입력 요소에 포커스가 있을 때는 단축키를 무시한다. `Ctrl/⌘ +`·`-`는 브라우저 확대 대신 리더 글자 크기에 연결한다.
-- **누락 리소스 배지**: 누락이 있으면 상단 바와 서재 카드에 `⚠ 누락 N` 배지를 표시한다. 누르면 경로와 원인을 보여준다.
-  원인은 "ZIP에 없음" 또는 "ZIP 루트 밖 참조 — 상위 폴더째로 압축하세요" 둘 중 하나다.
+- **🔍 검색 패널**: §7.1. ☰ 패널과 같은 형태로 표시한다.
+- 이전/다음 페이지 순서는 `pagePaths`의 경로 자연 정렬 순서를 따른다.
+- **PC 단축키**: `Space`(오버레이 토글), `T`(목차), `/`(검색), `B`(북마크 추가), `[`/`]`(이전/다음 페이지), `Home`/`End`, `+`/`-`(글자 크기, 수정자 키 없음).
+  - 브라우저 확대 `Ctrl/⌘ +/-`는 **가로채지 않는다**(접근성 기능 보존).
+  - 문서 안의 입력 요소에 포커스가 있거나 문서가 해당 키 이벤트를 이미 처리(`defaultPrevented`)했으면 단축키를 무시한다.
+  - iframe에 포커스가 있을 때는 agent가 키 이벤트를 셸로 전달한다(§6.7).
+- **리소스 이슈 표시**(읽는 중 실제 요청 결과 기반):
+  - `missing`·`outside-root`가 있으면 상단 바와 서재 카드에 `⚠ 누락 N` 배지를 표시한다. 누르면 경로와 원인을 보여준다.
+    원인 문구: "묶음에 없음" / "묶음 바깥 경로 참조 — 상위 폴더째로 압축하세요".
+  - `external`이 있으면 서재 카드에 "온라인 필요" 아이콘을 표시한다.
 
 ### 6.3 탭 판별 (reader-agent)
 문서 자체의 상호작용을 방해하지 않는 것이 최우선이다.
@@ -172,7 +272,9 @@ MIME은 `mime` 단위에서 결정한다. `woff2/woff/ttf/otf`, `mjs`, `json`, `
   - 대상과 조상 중에 `a, button, input, select, textarea, label, summary, video, audio, iframe, [role=button|link|tab|menuitem|checkbox], [contenteditable], [onclick], [tabindex]` 없음
   - 대상의 computed `cursor`가 `pointer` 아님
   - 이벤트가 document까지 전파된 뒤에도 `defaultPrevented`가 false
-- 판별이 실패하는 문서를 위해 **우회 수단을 항상 둔다**: 우측 가장자리의 작은 반투명 핸들 탭, PC 단축키.
+- 판별이 실패하는 문서나 agent 없는 모드를 위해 **우회 수단을 항상 둔다**. 우회 수단은 셸이 소유하므로 agent 상태와 무관하게 동작한다.
+  - 우측 가장자리의 작은 반투명 핸들 탭
+  - PC 단축키
 
 ### 6.4 스크롤 컨테이너 탐지
 `document.scrollingElement`가 실제로 스크롤 가능하면 그것을 쓴다. 아니면 `overflow-y: auto|scroll`이면서
@@ -180,112 +282,187 @@ MIME은 `mime` 단위에서 결정한다. `woff2/woff/ttf/otf`, `mjs`, `json`, `
 DOM 변경(`ResizeObserver` + 지연 재탐지)에 대응하며, 진행률·핸들·목차 이동은 모두 이 컨테이너를 기준으로 한다.
 
 ### 6.5 진행률 규칙
-- 페이지 진행률은 `(scrollTop + clientHeight) / scrollHeight`의 **최댓값**으로 한다. 스크롤이 없는 페이지는 표시 즉시 100%다.
+- 페이지 진행률은 `(scrollTop + clientHeight) / scrollHeight`의 **최댓값**으로 한다.
+- 스크롤이 없는 페이지는 `load` 이후 레이아웃이 안정된 뒤(§6.7의 안정화 조건)에도 스크롤이 없으면 100%로 본다. JS로 늦게 그려지는 문서의 오판을 막기 위해서다.
 - 98% 이상에 도달하면 `read = true`.
-- 문서 진행률은 전체 `htmlPaths` 페이지 진행률의 평균이다(방문하지 않은 페이지는 0).
+- 문서 진행률은 `pagePaths` 페이지 진행률의 평균이다(방문하지 않은 페이지는 0). 조각 HTML은 분모에서 빠진다.
 - 서재 카드에는 문서 진행률, 읽은 페이지 수/전체, 마지막으로 연 시각을 표시한다.
 
 ### 6.6 iOS 상단 영역 (Liquid Glass 대응)
-배경: iOS 26 Safari는 상단 바 색을 정할 때 `theme-color`를 사실상 무시한다. 대신 화면 상단 가장자리에 닿은 fixed 요소의
-배경색을 쓰고, 그런 요소가 없으면 콘텐츠 위에 반투명 blur를 적용한다. 이는 Apple 공식 문서가 아니라 커뮤니티에서 확인한 동작이며 버전마다 다를 수 있다.
+**배경**(커뮤니티 확인 동작이며 Apple 공식 문서는 없음, 버전마다 다를 수 있음):
+- iOS 26 Safari는 상단·하단 바 색을 정할 때 `theme-color`를 사실상 쓰지 않는다. 기본적으로 `body`(또는 `html`) 배경색을 쓰고,
+  화면 가장자리에 닿은 fixed 요소가 있으면 그 배경색이 우선한다. 색은 초기 페인트 시점에 고정된다는 보고가 있다.
+- Safari 탭에서는 `env(safe-area-inset-top)`이 0이다. 홈 화면 앱에서만 상단 safe-area가 생긴다.
+- `apple-mobile-web-app-status-bar-style`은 실행 시점에 고정되어 런타임에 바꿀 수 없다.
+  `black-translucent`는 상태바 글자색을 페이지에 맞춰 주지 않아 밝은 문서에서 시계 등이 안 보일 수 있다. iOS 26.1 회귀 보고(WebKit bug 301994)도 있다.
 
-대응:
+**대응**:
+- 1차 수단: 셸의 `html`·`body` `background-color`를 **현재 문서의 배경색**으로 동기화한다.
+  agent가 `body` 배경색(투명하면 `html`, 그것도 투명하면 흰색)을 `ready` 때와 변경 시 보고하고, 셸은 페이지 이동 때마다 갱신한다.
+  첫 렌더 때는 직전에 읽던 문서의 배경색(없으면 흰색)으로 시작해 초기 고정 문제를 줄인다.
+- 2차 수단(standalone에서만): `position: fixed; top: 0; height: env(safe-area-inset-top)` 띠를 같은 색으로 깐다. 하단 safe-area도 같다.
+- iframe은 `top: env(safe-area-inset-top)`부터 `bottom: env(safe-area-inset-bottom)`까지 배치해 내용이 상태바나 홈 인디케이터에 가려지지 않게 한다.
 - `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`
-- `<meta name="apple-mobile-web-app-capable" content="yes">`, `apple-mobile-web-app-status-bar-style="black-translucent"`
-- 셸이 **첫 렌더부터** `position: fixed; top: 0; height: env(safe-area-inset-top)` 띠를 둔다(z-index 최상위).
-  띠의 배경색은 agent가 보고한 현재 문서의 `body` 배경색(투명하면 `html`, 그것도 투명하면 흰색)으로 맞추고, 페이지 이동 시마다 갱신한다.
-- iframe은 `top: env(safe-area-inset-top)`부터 `bottom: env(safe-area-inset-bottom)`까지 배치해 문서 내용이 띠나 홈 인디케이터에 가려지지 않게 한다.
-  하단 safe-area 영역도 상단과 같은 방식으로 문서 배경색 띠를 깐다.
-- `theme-color` 메타도 함께 갱신한다(다른 브라우저와 구버전 대응).
-- 초기 페인트 시점에 색이 고정되는 문제가 보고되어 있으므로 실기기 검증 항목으로 둔다(§10).
+- `theme-color` 메타도 함께 갱신한다(다른 브라우저, 설치형 웹앱 대응).
+- **상태바 스타일(`default` vs `black-translucent`)과 밝은 배경에서의 글자 대비 처리는 P0 스파이크에서 결정**한다.
+  후보: (a) `default` + 매니페스트 색 조합, (b) `black-translucent` + 문서 배경이 밝으면 띠만 어둡게.
+  iOS 26.0 / 26.1 / 최신 버전 실기기에서 비교한다.
+
+### 6.7 셸 ↔ agent 프로토콜
+- **활성 조건**: agent는 `window.parent === window.top`이고 부모가 같은 출처의 리더 셸일 때만 활성화된다. 중첩 iframe이나 frameset 자식 안에서는 가드(§9.4)만 설치하고 보고는 하지 않는다.
+- **메시지 검증**: 모든 메시지에 `protocolVersion`과 `type`을 둔다. 셸은 `event.origin`이 자기 출처이고 `event.source === iframe.contentWindow`일 때만 처리한다.
+  버전이 다르면 agent 없는 모드로 동작하고 서재로 돌아갈 때 업데이트를 적용한다(§10).
+- **핸드셰이크**:
+  1. agent는 `DOMContentLoaded`에 `ready{path, title, bgColor, outline}`을 보낸다.
+  2. 셸은 `init{textScale, restore?: {scrollRatio} | {find} | {bookmark}}`로 응답한다.
+  3. agent는 복원 위치를 적용하고, `load` 이후 레이아웃이 안정될 때까지(ResizeObserver 변화가 500ms 동안 없을 때, 최대 3초) 다시 적용한다.
+     사용자가 직접 스크롤하면 재적용을 즉시 멈춘다.
+- **agent 없는 모드**: `ready`가 3초 안에 오지 않으면(CSP 차단 등) 진행률·목차·탭 토글 없이 문서만 보여준다.
+  셸 소유 기능(가장자리 핸들, 단축키 일부, 페이지 목록, 이전/다음)은 유지하고, 상단 바에 "제한 모드" 표시를 둔다.
+- **키 전달**: agent는 iframe 안의 `keydown`을 입력 요소가 아니고 `defaultPrevented`가 false일 때만 `key{key, mods}`로 셸에 전달한다.
 
 ## 7. 편의 기능
 
 ### 7.1 문서 전체 텍스트 검색
-- **색인**: 가져오기 때 `text-extract`가 HTML별로 평문을 만든다. Worker에는 DOM이 없으므로 `script/style/template/noscript` 블록을 제거하고,
-  태그를 제거한 뒤 HTML 엔티티를 디코딩하고 공백을 정리한다. 결과는 NFC 정규화해서 `texts`에 저장한다.
+- **색인**: 가져오기 때 `text-extract`가 HTML별 평문을 만든다. `html-meta`로 판정한 인코딩으로 디코딩하고,
+  `script/style/template/noscript` 블록과 태그를 제거한 뒤 HTML 엔티티를 디코딩하고 공백을 정리한다. 결과는 NFC 정규화해서 `texts`에 저장한다.
 - **검색**: NFC 정규화 + 대소문자 무시 부분 문자열 검색(한글은 형태소 분석 없이 부분 일치). 입력 후 200ms 디바운스를 둔다.
   결과는 페이지별로 묶고 앞뒤 40자 스니펫을 붙이며, 페이지당 최대 20건까지 보여준다.
-- **이동**: 결과를 누르면 해당 페이지를 로드하고 agent에 `find{query, occurrence}`를 보낸다. agent는 `TreeWalker`로 n번째 일치 위치를 찾아 스크롤하고,
-  잠시 강조한다(CSS Custom Highlight API, 미지원 브라우저는 Selection으로 대체).
+- **이동**: 색인은 "어느 페이지에 있는가"와 스니펫 용도로만 쓴다. 결과를 누르면 해당 페이지를 로드하고 `init`의 `restore.find{query, snippet}`로 전달한다.
+  agent는 실제 DOM에서 `TreeWalker`로 일치 위치를 찾되, 스니펫 문맥과 가장 잘 맞는 일치를 고른다. 찾지 못하면 첫 일치로 폴백한다.
+  위치를 찾으면 스크롤하고 CSS Custom Highlight API로 잠시 강조한다.
 - **한계**: JS가 실행된 뒤에야 만들어지는 텍스트는 색인되지 않는다. 검색 패널 하단에 한 줄로 안내한다.
-  같은 페이지 안에서만 찾을 때도 이 검색을 쓰며, 브라우저 기본 찾기(`Ctrl/⌘+F`)는 막지 않는다.
+  브라우저 기본 찾기(`Ctrl/⌘+F`)는 막지 않는다.
 
 ### 7.2 수정본 재가져오기
 - `sourceName`이 같은 문서가 있으면 "기존 문서 교체 / 새 문서로 추가"를 묻는다.
-- **교체**: 새 캐시(`book-<id>-next`)에 먼저 가져오고, 성공하면 기존 캐시와 맞바꾼다(실패 시 기존 문서는 그대로 남음).
-  `id`는 유지한다. 새 묶음에도 있는 경로의 진행률과 북마크는 유지하고, 사라진 경로의 기록은 삭제한다. `lastPath`가 사라졌으면 `entryPath`로 되돌린다.
+- **교체**:
+  1. 그 문서가 리더에 열려 있으면 먼저 닫는다.
+  2. 새 캐시 `book-<id>-v<n+1>`에 가져온다. 이 동안 기존 문서는 그대로 읽을 수 있는 상태로 남는다.
+  3. 하나의 IndexedDB 트랜잭션으로 `books.cacheName` 포인터를 새 캐시로 바꾸고, `bookFiles`·`texts`를 교체하고, 진행률·북마크를 정리한다.
+     - `id`, `title`(사용자가 바꾼 이름 포함), `textScale`은 유지한다.
+     - 새 묶음에도 있는 경로의 진행률과 북마크는 유지하고, 사라진 경로의 기록과 `issues`는 삭제한다.
+     - `lastPath`가 사라졌으면 `entryPath`로 되돌린다.
+  4. 커밋 후 구 캐시를 삭제한다. 실패하면 새 캐시만 삭제한다. 남은 것은 §4.3-10의 시작 시 정리가 처리한다.
 
 ### 7.3 북마크
-- 오버레이의 🔖 또는 `B`로 현재 위치(`path`, `scrollRatio`, 현재 섹션 제목)를 저장한다. 이미 거의 같은 위치(같은 페이지, 비율 차이 2% 이내)에 북마크가 있으면 해제한다.
+- 오버레이의 🔖 또는 `B`로 현재 위치(`path`, `scrollRatio`, 현재 섹션 제목)를 저장한다. 같은 페이지에서 비율 차이 2% 이내에 북마크가 이미 있으면 해제한다.
 - ☰ 패널의 북마크 탭에서 목록(섹션 제목·페이지·만든 날짜)을 보고, 누르면 이동하며, 밀거나 삭제 버튼으로 지운다.
 
 ### 7.4 글자 크기 조절
-- agent가 문서 루트(`html`)에 CSS `zoom`을 적용한다. px로 고정된 레이아웃도 함께 확대되어 깨지지 않는다.
-- 단계: 80·90·100·110·125·150·175·200%, 문서별 `fontScale`로 저장한다.
-- 크기를 바꾸면 바꾸기 직전의 `scrollRatio`를 유지하도록 다시 스크롤한다.
+CSS `zoom`은 텍스트 크기가 아니라 페이지 전체 확대여서, 모바일에서는 `100vw` 요소나 고정 폭 레이아웃이 화면을 넘어 가로 스크롤이 생긴다. 그래서 플랫폼별로 방식을 나눈다.
+- **모바일(iOS Safari, Android Chrome)**: 문서 루트에 `text-size-adjust: N%`(iOS는 `-webkit-text-size-adjust` 병기)를 적용한다. 레이아웃은 그대로 두고 글자만 커진다.
+- **PC**: 문서 루트에 CSS `zoom`을 적용한다(페이지 확대).
+- 판별은 `(pointer: coarse)` 미디어쿼리 기준으로 한다.
+- 단계: 80·90·100·110·125·150·175·200%, 문서별 `textScale`로 저장한다. UI 명칭은 "글자 크기"로 하되 PC 툴팁에는 "페이지 확대"라고 적는다.
+- 적용은 SW 주입 시 `data-scale`로 첫 페인트 전에 한다(§5.4). 바꾸면 바꾸기 직전의 `scrollRatio`를 유지하도록 다시 스크롤한다.
+- 모바일에서 `text-size-adjust`가 기대대로 동작하는지는 P0 스파이크에서 함께 확인한다. 동작하지 않으면 모바일도 `zoom`으로 되돌리고 상한을 150%로 둔다.
 
-### 7.5 바로 열기 연동 (Android·PC)
-- **PC(Chromium 설치 앱)**: 매니페스트 `file_handlers`에 `.zip`, `.html`, `.htm`을 등록하고, `launchQueue`로 받은 파일을 가져오기로 넘긴다.
-- **Android(설치 앱)**: 매니페스트 `share_target`(POST, multipart, files)을 등록한다. SW가 받은 파일을 임시 캐시에 두고 `/?import=pending`으로 이동하면, 앱이 그 파일을 가져온다.
+### 7.5 바로 열기 연동 (P4, Android·PC)
+- **PC(Chromium 설치 앱 전용)**: 매니페스트 `file_handlers`에 `.zip`, `.html`, `.htm`을 등록하고, `launchQueue`로 받은 파일을 가져오기로 넘긴다.
+- **Android(설치 앱)**: 매니페스트 `share_target`(POST, multipart)을 등록한다.
+  - `accept`에 `application/zip`, `application/x-zip-compressed`, `application/octet-stream`, `.zip`, `text/html`, `.html`을 모두 넣는다. 파일 관리자마다 ZIP의 MIME이 다르기 때문이다.
+  - SW는 `request.formData()`로 파일을 받아 임시 캐시에 두고 `303 → /?import=pending`으로 보낸다. 앱이 그 파일을 가져온 뒤 임시 캐시를 지운다.
+  - `formData()`는 본문 전체를 메모리에 올리므로 대용량 ZIP에서 실패할 수 있다. 실패하면 "앱에서 직접 가져오기를 이용하세요"라고 안내한다.
 - **iOS**: PWA에 해당 기능이 없으므로 지원하지 않는다. 앱 안의 가져오기 버튼만 쓴다.
 
 ### 7.6 서재 검색·정렬
 - 서재 상단 검색창: 제목과 `sourceName`을 부분 일치로 필터링한다.
-- 정렬: 최근 읽음(기본), 가져온 날짜, 이름(자연 정렬), 진행률. 마지막 선택은 저장해 둔다.
+- 정렬: 최근 읽음(기본), 가져온 날짜, 이름(자연 정렬), 진행률. 마지막 선택은 `settings`에 저장한다.
 
 ### 7.7 문서명 지정·수정
 - **기본 이름**: 시작 페이지의 `<title>`을 쓰고, 비어 있으면 `sourceName`을 쓴다.
-  보고서 HTML은 `<title>`이 "Document", "index"처럼 의미 없는 경우가 많으므로 이런 흔한 무의미 제목 목록에 걸리면 `sourceName`을 우선한다.
+  `<title>`이 흔한 무의미 제목(대소문자 무시: `document`, `index`, `untitled`, `home`, `제목 없음`, `untitled document`)이면 `sourceName`을 쓴다.
 - **중복 처리**: 이름이 기존 문서와 같으면 자동으로 ` (2)`, ` (3)` 접미사를 붙인다. 서재 카드에는 보조 정보로 `sourceName`과 가져온 날짜를 함께 표시해 구분을 돕는다.
 - **수정**: 서재 카드의 ⋯ 메뉴(또는 길게 누르기/우클릭) → "이름 바꾸기"에서 바꾼다. 같은 메뉴에 "삭제"도 둔다.
-  빈 이름은 허용하지 않고, 앞뒤 공백을 제거하며, 최대 100자까지 허용한다. 중복 이름은 수정할 때는 경고만 하고 허용한다.
+  빈 이름은 허용하지 않고, 앞뒤 공백을 제거하며, 최대 100자까지 허용한다. 직접 바꿀 때는 중복 이름도 경고만 하고 허용한다.
 - 이름을 바꿔도 재가져오기 매칭(`sourceName`)에는 영향이 없다. 교체로 다시 가져올 때도 사용자가 지정한 이름을 유지한다.
 
 ## 8. 성능
 
 | 지점 | 방법 | 목표 |
 |---|---|---|
-| ZIP 가져오기 | Worker에서 스트리밍 해제, 파일 단위로 즉시 저장, ZIP 전체를 메모리에 올리지 않음 | 수백 MB ZIP에서도 UI가 멈추지 않음 |
-| 파일 응답 | Cache Storage의 `Response`를 그대로 스트리밍 응답, base64 변환 없음 | 로컬 파일 수준의 응답 속도 |
-| HTML 주입 | 첫 `<head>` 위치만 찾아 문자열 삽입. HTML 파일에만 적용 | 주입 오버헤드 무시할 수준 |
+| ZIP 가져오기 | Worker에서 엔트리별 slice + Inflate, `cache.put`을 await하는 백프레셔, ZIP 전체를 메모리에 올리지 않음 | 수백 MB ZIP에서도 UI가 멈추지 않음, 피크 메모리 ≈ 가장 큰 엔트리 1개 |
+| 파일 응답 | Cache Storage의 `Response`를 그대로 응답, base64 변환 없음 | 로컬 파일 수준의 응답 속도 |
+| HTML 주입 | 처음 4KB만 바이트 스캔 후 삽입, 네비게이션 HTML에만 적용 | 주입 오버헤드 무시할 수준 |
 | 스크롤 | passive 리스너, rAF 스로틀, `IntersectionObserver`로 섹션 추적 | 60fps 유지 |
 | 오버레이 | `transform`/`opacity`만 애니메이션 | 레이아웃 재계산 없음 |
 | 진행률 저장 | 메모리 갱신 + 1초 디바운스 + `pagehide` 시 즉시 저장 | IDB 쓰기 최소화 |
-| 앱 시작 | 앱 셸 프리캐시, 서재는 `books` 메타만 읽음 | 오프라인 재실행 시 1초 이내 표시 |
-| 번들 | Svelte + 코드 분할(리더/서재) | 초기 JS 50KB(gzip) 이하 |
+| 앱 시작 | 앱 셸 프리캐시, 서재는 `books` 메타만 읽음, 고아 정리는 첫 화면 표시 후 유휴 시간에 | 오프라인 재실행 시 1초 이내 표시 |
+| 번들 | Svelte + 코드 분할(리더/서재), agent는 별도 소형 번들 | 초기 JS 50KB(gzip) 이하, agent 8KB(gzip) 이하 |
+
+가장 큰 단일 엔트리(예: 수백 MB 동영상)는 Blob으로 모이는 동안 메모리를 쓴다. iOS 메모리 한도와 대용량 Range 성능은 P0 스파이크에서 확인하고,
+문제가 있으면 임계값(예: 32MB) 이상 파일을 4MB 청크로 나눠 저장하는 방식으로 바꾼다(§12).
 
 ## 9. 에러 처리와 제약
 
-- **파일명 인코딩**: ZIP 엔트리의 UTF-8 플래그(bit 11)를 확인한다. 플래그가 없으면 UTF-8 디코딩을 먼저 시도하고, 실패하면 `TextDecoder('euc-kr')`로 해석한다.
-- **경로 탈출**: `..`로 문서 루트 밖을 가리키면 404를 반환하고 누락 목록에 "ZIP 루트 밖 참조"로 기록한다.
-- **손상 ZIP / 중간 실패**: 롤백하고 오류 메시지를 표시한다.
-- **용량 부족**(사전 확인 또는 `QuotaExceededError`): 롤백하고 안내한다.
-- **시작 페이지 없음**: HTML이 하나도 없으면 가져오기를 거부한다.
-- **외부 링크**: 다른 출처로 가는 링크(`target` 무관)는 agent가 가로채 셸을 통해 새 브라우저 탭으로 연다.
-  같은 문서 안의 `target=_blank` 링크는 iframe 안에서 연다.
-- **`window.top` 접근 문서**: 프레임 탈출을 시도하는 스크립트(`top.location = ...`)는 막지 않는다. 대신 셸이 `beforeunload`를 감지해 리더 밖으로 이동하는 것을 확인하게 한다.
-- **보안(수용한 위험)**: 문서의 JS는 앱과 같은 출처에서 실행되므로 다른 문서의 데이터에 접근할 수 있다.
-  사용자가 직접 가져온 신뢰할 수 있는 문서용이라는 전제로 이 위험을 수용하며, 첫 가져오기 화면에 한 줄로 고지한다.
+### 9.1 가져오기
+- **파일명 인코딩**: Info-ZIP Unicode Path extra field(0x7075)가 있으면 그것을 쓴다. 없으면 UTF-8 플래그(bit 11)를 본다.
+  플래그도 없으면 `TextDecoder('utf-8', {fatal: true})`를 시도하고, 실패하면 `TextDecoder('euc-kr')`로 해석한다. 이후 NFC 정규화한다.
+- **손상 ZIP**(EOCD 없음, CRC 불일치 등)·**암호화·미지원 압축**·**용량 부족**(사전 검사 또는 `QuotaExceededError`)·**zip bomb 의심**: 중단하고 원인별 메시지를 표시한다.
+  캐시를 정리하며, 정리하지 못한 것은 시작 시 정리가 처리한다.
+- **HTML 없음**: 가져오기를 거부한다.
 
-## 10. 테스트
+### 9.2 읽기
+- **경로 탈출**: `..`로 문서 루트 밖을 가리키면 404를 응답하고 `outside-root`로 기록한다.
+- **외부 링크**: 다른 출처로 가는 링크는 agent가 가로채 셸을 통해 새 브라우저 탭으로 연다.
+  같은 문서 안의 링크는 `target`이 `_blank`·`_top`·`_parent`여도 `_self`로 정규화해 iframe 안에서 연다.
+- **프레임 탈출**: 문서 스크립트가 `top.location`을 바꾸거나 `/book/*` 페이지가 최상위 창으로 열리면, SW가 §5.2-2 규칙으로 리더로 되돌린다.
+- **SW 미제어·미지원**: §4.4-1과 §2.2.
 
-### 단위 (Vitest)
-`path`(정규화, 탈출 차단, 디렉터리 index, 루트 절대경로 매핑), `mime`, 파일명 디코딩(UTF-8/CP949),
-진행률 계산, 시작 페이지 결정, `scanner`(누락·루트 밖 참조 감지), Range 헤더 파싱,
-`text-extract`(script/style 제거, 엔티티 디코딩, NFC), `search`(부분 일치, 스니펫), 재가져오기 시 진행률·북마크 이관 규칙, 서재 정렬, 기본 문서명 결정·중복 접미사 부여.
+### 9.3 iOS
+- Safari 탭과 홈 화면 앱의 저장소 분리, 데이터 삭제 정책: §2.1.
 
-### E2E (Playwright: Chromium, WebKit)
+### 9.4 같은 출처 실행에 대한 가드
+문서의 JS는 앱과 같은 출처에서 실행된다. sandbox iframe은 opaque origin이 되어 SW 제어를 받지 못하므로 대안이 될 수 없다.
+그래서 완전한 격리는 포기하고, **문서가 의도치 않게 리더를 망가뜨리는 것**을 막는 가드를 agent가 문서 스크립트보다 먼저 설치한다.
+agent는 주입 위치상 문서의 다른 스크립트보다 먼저 실행된다.
+- **Service Worker**: `navigator.serviceWorker.register`는 reject, `getRegistrations`는 빈 배열, `getRegistration`은 `undefined`를 반환하도록 스텁한다.
+  HTML 내보내기 도구가 넣는 "기존 SW 전부 해제" 코드가 리더 SW를 해제하는 것을 막는다.
+- **localStorage / sessionStorage**: 문서별 접두사(`book:<id>:`)를 붙이는 래퍼로 교체한다. `length`, `key()`, `clear()`도 그 접두사 범위에서만 동작한다.
+  같은 템플릿으로 만든 문서끼리 진도·테마 값이 섞이지 않게 한다.
+- **Cache Storage / IndexedDB**: `caches.delete`·`caches.keys`와 `indexedDB.deleteDatabase`·`indexedDB.open`이 앱 소유 이름(`book-*`, `workbox-*`, `html-reader`)에 접근하면 거부한다.
+- **쿠키**: 격리하지 않는다(범위 밖). 문서끼리 쿠키를 공유할 수 있음을 수용한다.
+- **수용한 위험**: 악의적인 문서는 가드를 우회해 다른 문서의 데이터에 접근할 수 있다. 사용자가 직접 가져온 신뢰할 수 있는 문서용이라는 전제로 수용하며, 첫 가져오기 화면에 한 줄로 고지한다.
+
+## 10. 앱 업데이트
+
+- SW는 새 버전을 받으면 **대기 상태로 둔다**(`skipWaiting` 자동 호출 안 함).
+- 셸은 새 버전이 대기 중이면 서재 화면에 "업데이트 준비됨 — 적용" 알림을 띄운다. **리더가 열려 있는 동안에는 적용하지 않는다.**
+  사용자가 적용하거나 리더를 닫고 서재로 돌아오면 `skipWaiting` 메시지를 보내고 새로고침한다.
+- 셸과 agent 간 `protocolVersion`이 다르면 agent 없는 모드로 동작한다(§6.7).
+- `/__reader/agent.js`는 프리캐시 자산으로 SW 버전과 함께 교체된다.
+- 프리캐시 정리는 `workbox-precache-*` 캐시만 대상으로 한다. `book-*` 캐시는 절대 건드리지 않는다.
+- IndexedDB 스키마는 버전 번호와 `onupgradeneeded` 단계별 마이그레이션으로 관리한다. 다른 탭이 구버전 연결을 잡고 있으면 `versionchange`에서 연결을 닫는다.
+- SW는 유휴 시 종료될 수 있으므로 전역 메모리 상태에 의존하지 않는다. 필요한 상태는 IndexedDB에서 읽는다.
+
+## 11. 테스트
+
+### 11.1 단위 (Vitest)
+- `zip`: EOCD·ZIP64 파싱, STORED/DEFLATE 엔트리, 데이터 디스크립터 ZIP(macOS Finder 생성), CRC 불일치, 암호화·미지원 압축 감지
+- `filename`: UTF-8 플래그, Unicode extra field, CP949, NFD → NFC, 정크 판정
+- `html-meta`: BOM·meta charset·EUC-KR 판정, `<title>` 추출, 완전한 문서/조각 판정
+- `text-extract`: script/style 제거, 엔티티 디코딩, EUC-KR 문서, NFC
+- `path`: 쿼리 제거, 퍼센트 디코딩, NFC, 탈출 판정, 대소문자 폴백, 디렉터리 해석
+- `inject`: `<head>`/`<html>`/doctype/없음 위치, 주석 안 일치 무시, UTF-16, meta charset 1024바이트 보호, XHTML
+- `range`: 일반·열린·suffix 범위, 416
+- `mime`, 진행률 계산, 시작 페이지 결정, 기본 문서명·중복 접미사, 재가져오기 시 진행률·북마크 이관, 서재 정렬, `protocol` 메시지 검증
+
+### 11.2 E2E (Playwright: Chromium, WebKit)
 테스트용 ZIP 세트를 저장소에 둔다.
-1. 여러 페이지와 상대·루트 절대 링크로 구성된 문서
-2. `fetch('./data.json')`, ES module import
+1. 여러 페이지와 상대·루트 절대 링크(`/page2.html`, `/css/a.css`)로 구성된 문서, `no-referrer` 메타가 있는 문서
+2. `fetch('./data.json')`, ES module import, `fetch`로 읽는 HTML 조각(주입되지 않아야 함)
 3. `@font-face` 상대경로 폰트
 4. 내부 `div` 스크롤 컨테이너 문서
-5. CP949 한글 파일명 ZIP
-6. 동영상(Range)
-7. 누락 리소스가 있는 문서(배지 표시)
-8. 클릭 핸들러가 붙은 `div`·탭 메뉴가 있는 문서(오버레이가 잘못 토글되지 않음)
-9. 단일 `.html` 파일
+5. CP949 한글 파일명 ZIP, macOS에서 만든 NFD 한글 파일명 ZIP(`__MACOSX` 포함)
+6. EUC-KR 인코딩 HTML(주입 후 한글이 깨지지 않아야 함)
+7. 동영상(Range)
+8. 누락 리소스가 있는 문서(읽는 중 배지 표시)
+9. 클릭 핸들러가 붙은 `div`·탭 메뉴가 있는 문서(오버레이가 잘못 토글되지 않음)
+10. 단일 `.html` 파일
+11. SW 해제 코드·`localStorage.clear()`가 들어 있는 문서(리더가 계속 동작하고 다른 문서의 값이 남아 있어야 함)
+12. `target=_top` 링크·`top.location` 변경 문서(리더 안에 머물러야 함)
+13. agent를 차단하는 CSP 메타가 있는 문서(제한 모드로 열림)
 
 공통 시나리오: 가져오기 → 읽기 → 진행률 저장 → 재실행 후 이어 읽기 → 오프라인 모드 재실행.
 
@@ -293,12 +470,37 @@ DOM 변경(`ResizeObserver` + 지연 재탐지)에 대응하며, 진행률·핸�
 - 검색어 입력 → 다른 페이지의 결과 클릭 → 해당 위치로 스크롤되고 강조됨
 - 북마크 추가 → 다른 페이지로 이동 → 북마크 탭에서 복귀
 - 글자 크기 변경 → 위치 유지 → 재실행 후 크기 유지
-- 같은 이름 ZIP 재가져오기(교체) → 남은 경로의 진행률·북마크 유지, 사라진 경로의 기록 삭제
+- 같은 이름 ZIP 재가져오기(교체) → 남은 경로의 진행률·북마크 유지, 사라진 경로의 기록 삭제, 구 캐시 삭제
+- 가져오기 도중 페이지 새로고침 → 재실행 시 고아 캐시 정리
 - 서재 검색·정렬
 - 같은 제목 문서 가져오기 → 접미사 자동 부여 → 이름 바꾸기 → 재가져오기(교체) 후에도 바꾼 이름 유지
+- 새 SW 버전 배포 → 리더 열림 중에는 적용 안 됨 → 서재에서 적용
 - (Chromium) `launchQueue`로 파일 전달 시 가져오기 진행
 
-### 실기기 체크리스트 (수동)
-- iOS 26 홈 화면 앱: 상단 띠 색이 문서 배경과 일치하는지, blur·겹침이 없는지, 페이지 이동 후 색이 갱신되는지, 노치·홈 인디케이터 영역 처리
-- iOS 26 Safari 탭, Android Chrome(설치/미설치), Windows·macOS Chrome/Edge, macOS Safari
-- 각 기기에서 대용량 ZIP(200MB 이상) 가져오기와 오프라인 재실행
+### 11.3 실기기 체크리스트 (수동)
+Playwright WebKit은 iOS Safari가 아니므로 다음은 실기기로만 검증한다.
+- iOS 26.0 / 26.1 / 최신 홈 화면 앱: 상단 색이 문서 배경과 일치하는지, blur·겹침이 없는지, 페이지 이동 후 색이 갱신되는지, 밝은 문서에서 상태바 글자가 보이는지, 노치·홈 인디케이터 영역
+- iOS Safari 탭: 홈 화면 추가 안내, 임시 보관 경고, 상단·하단 바 틴트
+- iOS 대용량 동영상(300MB 이상) 재생과 탐색, 대용량 ZIP(200MB 이상) 가져오기 중 메모리 종료 여부
+- 모바일 `text-size-adjust` 동작(iOS, Android)
+- Android Chrome(설치/미설치), share target으로 ZIP 공유(여러 파일 관리자)
+- Windows·macOS Chrome/Edge(설치 앱 파일 연결 포함), macOS Safari
+- 각 기기에서 오프라인 재실행
+
+## 12. 단계
+
+기능은 모두 v1에 포함하되 다음 순서로 구현한다. 각 단계는 끝날 때 동작하는 상태여야 한다.
+
+| 단계 | 내용 | 종료 조건 |
+|---|---|---|
+| **P0 실기기 스파이크** (버리는 코드) | SW + iframe + 루트 절대경로 리다이렉트, iOS 상단 영역 후보 비교, 대용량 미디어 Range, 모바일 `text-size-adjust` | 아래 4개 질문에 답이 나오고 스펙에 반영됨 |
+| **P1 핵심** | 프로젝트 골격, `zip`·`filename`·`html-meta`·`text-extract`·`importer`, `storage`, `path`·`mime`·`range`·`inject`·`sw`, 서재(목록·가져오기·삭제), 리더(iframe·SW 준비 확인), agent 가드·핸드셰이크·진행률·이어 읽기, iOS 상단 영역, 앱 업데이트 정책, 호스팅 설정 | 성공 기준 1·2·5·6 충족 |
+| **P2 읽기 UI** | 오버레이·탭 판별·진행 바·진행선, 빠른 스크롤 핸들, 목차·페이지 패널, 이전/다음, 단축키, 글자 크기, 리소스 이슈 배지 | 성공 기준 3·4 충족 |
+| **P3 편의** | 문서 전체 검색, 북마크, 재가져오기 교체, 문서명 지정·수정, 서재 검색·정렬 | §7.1–7.3, §7.6–7.7 동작 |
+| **P4 연동** | `file_handlers`·`launchQueue`, `share_target` | §7.5 동작 |
+
+**P0 스파이크가 답해야 할 질문**
+1. 루트 절대경로 네비게이션 302 리다이렉트와 서브리소스 매핑이 Chromium·WebKit·iOS 실기기에서 모두 동작하는가?
+2. iOS 26 홈 화면 앱에서 상태바 스타일 후보 (a)/(b) 중 어느 쪽이 문서 배경과 자연스럽게 이어지는가? Safari 탭에서 배경색 동기화가 효과가 있는가?
+3. iOS에서 Cache Storage의 300MB 이상 단일 Response로 Range 재생·탐색이 메모리 문제 없이 되는가? 안 되면 청크 저장으로 바꾼다.
+4. 모바일 `text-size-adjust`가 iOS·Android에서 글자만 키우는가?
