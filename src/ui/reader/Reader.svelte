@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { getBook, getBookFiles, getProgress, getSetting, setSetting, updateBook, type Book, type PageProgress } from '../../lib/storage';
   import { ProgressTracker, bookProgress, formatPageInfo } from '../../lib/progress';
   import { neighbor, orderedPages } from '../../lib/file-tree';
@@ -15,6 +15,8 @@
   import FilesTab from './FilesTab.svelte';
   import { layout } from '../layout.svelte';
   import { createSession, type AgentState } from './session';
+  import { isEditableTarget, shortcutFor, type Action } from '../../lib/shortcuts';
+  import type { Mods } from '../../lib/protocol';
 
   let { bookId, openPath, onexit, onopened }: {
     bookId: string; openPath?: string | null; onexit: () => void; onopened?: () => void;
@@ -78,6 +80,18 @@
   export const pokeOverlay = arm;
   const openOverlay = () => { overlayOpen = true; arm(); };
   const onTap = () => { if (layout.desktop) return; overlayOpen = !overlayOpen; arm(); };
+
+  // Crossing the 768px breakpoint: drop every mobile-only state (sheet + its hold, overlay, timer). The iframe node stays.
+  let wasDesktop = layout.desktop;
+  $effect(() => {
+    if (layout.desktop === wasDesktop) return;
+    wasDesktop = layout.desktop;
+    sheetOpen = false; sheetHold?.(); sheetHold = null;
+    overlayOpen = false; clearTimeout(hideTimer);
+    // The frame's width changes, so the text reflows; engines without scroll anchoring (WebKit) would drift. Re-apply the ratio.
+    const r = untrack(() => curRatio);
+    requestAnimationFrame(() => session?.post({ type: 'scroll-to', ratio: r }));
+  });
 
   let tracker: ProgressTracker | null = null;
   let book: Book | undefined;
@@ -152,7 +166,7 @@
         refreshBook();
       },
       onTap,
-      onKey: () => {},
+      onKey,
       onExternal: (url) => { window.open(url, '_blank', 'noopener'); },
       getInit: (p) => {
         const init: { textScale: number; restore?: Restore } = { textScale: book?.textScale ?? 1 };
@@ -177,6 +191,24 @@
   const prevPath = $derived(neighbor(pages, path, -1));
   const nextPath = $derived(neighbor(pages, path, 1));
 
+  // One dispatcher for the shell's own keydown and the agent's forwarded keys. Actions without a handler are ignored.
+  const actions: Partial<Record<Action, () => void>> = {
+    'toggle-overlay': onTap,
+    'toggle-panel': () => { if (panelOpen) closePanel(); else if (layout.desktop) openDock(); else openSheet(); },
+    'prev-page': () => go(-1),
+    'next-page': () => go(1),
+    top: () => session?.post({ type: 'scroll-to', ratio: 0 }),
+    bottom: () => session?.post({ type: 'scroll-to', ratio: 1 }),
+  };
+  function onKey(key: string, mods: Mods) {
+    const a = shortcutFor(key, mods, { desktop: layout.desktop });
+    if (a) actions[a]?.();
+  }
+  function onWindowKey(e: KeyboardEvent) {
+    if (e.defaultPrevented || e.isComposing || isEditableTarget(e.target as Element | null) || notice !== 'none') return;
+    onKey(e.key, { ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey });
+  }
+
   async function back() {
     try { await tracker?.flush(); } catch { /* best effort */ }
     await setSetting('activeBookId', null).catch(() => {});
@@ -184,6 +216,8 @@
     onexit();
   }
 </script>
+
+<svelte:window onkeydown={onWindowKey} />
 
 {#if notice === 'unsupported'}
   <div role="alert" data-testid="unsupported-notice">
@@ -197,23 +231,25 @@
   </div>
 {/if}
 
-<div class="reader" data-testid="reader" data-book-id={bookId} data-path={path} data-agent={agent} data-overlay={layout.desktop || overlayOpen ? 'open' : 'closed'}
+<div class="reader" class:desk={layout.desktop} data-testid="reader" data-book-id={bookId} data-path={path} data-agent={agent} data-overlay={layout.desktop || overlayOpen ? 'open' : 'closed'}
   hidden={notice !== 'none'} style:--panel-w={layout.desktop && dockOpen ? `${panelWidth}px` : '0px'}>
   <iframe bind:this={iframe} data-testid="reader-frame" title="문서" inert={sheet}></iframe>
   <div role="presentation" onpointerdown={pokeOverlay} inert={sheet}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back}>
     {#snippet topActions()}
       {#if !layout.desktop}
         <button type="button" class="act" data-testid="btn-panel" aria-label="파일·북마크" aria-expanded={sheetOpen} bind:this={btnPanel} onclick={openSheet}><Icon name="menu" /></button>
-      {:else if panelReady && !dockOpen}
-        <button type="button" class="act" data-testid="panel-toggle" aria-label="패널 펼치기" aria-expanded="false" onclick={openDock}><Icon name="panel" /></button>
+      {:else}
+        {@render pn()}
+        {#if panelReady && !dockOpen}
+          <button type="button" class="act" data-testid="panel-toggle" aria-label="패널 펼치기" aria-expanded="false" onclick={openDock}><Icon name="panel" /></button>
+        {/if}
       {/if}
     {/snippet}
     {#snippet bottom()}
       <div class="nav">
-        <button type="button" data-testid="btn-top" aria-label="맨 위" disabled={agent === 'limited'} onclick={() => session?.post({ type: 'scroll-to', ratio: 0 })}><Icon name="to-top" /></button>
-        <button type="button" data-testid="btn-prev" aria-label="이전 쪽" disabled={!prevPath} onclick={() => go(-1)}><Icon name="prev" /></button>
-        <button type="button" data-testid="btn-next" aria-label="다음 쪽" disabled={!nextPath} onclick={() => go(1)}><Icon name="next" /></button>
-        <button type="button" data-testid="btn-bottom" aria-label="맨 아래" disabled={agent === 'limited'} onclick={() => session?.post({ type: 'scroll-to', ratio: 1 })}><Icon name="to-bottom" /></button>
+        <button type="button" data-testid="btn-top" aria-label="맨 위" disabled={agent === 'limited'} onclick={actions.top}><Icon name="to-top" /></button>
+        {@render pn()}
+        <button type="button" data-testid="btn-bottom" aria-label="맨 아래" disabled={agent === 'limited'} onclick={actions.bottom}><Icon name="to-bottom" /></button>
       </div>
     {/snippet}
   </Overlay></div>
@@ -233,16 +269,22 @@
   {/if}
   {#if !layout.desktop && !overlayOpen}<RibbonTab onopen={openOverlay} />{/if}
   {#if hint && !layout.desktop}<HintToast ondismiss={dismissHint} />{/if}
-  {#if showLine}<ProgressLine pct={curPct} hidden={overlayOpen && !layout.desktop} />{/if}
+  {#if showLine && !layout.desktop}<ProgressLine pct={curPct} hidden={overlayOpen && !layout.desktop} />{/if}
 </div>
+
+{#snippet pn()}
+  <button type="button" class="act" data-testid="btn-prev" aria-label="이전 쪽" disabled={!prevPath} onclick={() => go(-1)}><Icon name="prev" /></button>
+  <button type="button" class="act" data-testid="btn-next" aria-label="다음 쪽" disabled={!nextPath} onclick={() => go(1)}><Icon name="next" /></button>
+{/snippet}
 
 <style>
   .reader { position: fixed; inset: 0; background: var(--bg-reader); }
   .reader[hidden] { display: none; }
   .nav { display: flex; justify-content: space-around; align-items: center; min-height: 56px; }
+  .act:disabled, .nav button:disabled { opacity: .35; }
   .nav button { background: none; border: 0; color: var(--text); width: 44px; height: 44px; display: grid; place-items: center; }
-  .nav button:disabled { opacity: .35; }
   .act { background: none; border: 0; color: var(--text); width: 44px; height: 44px; display: grid; place-items: center; }
   .empty { margin: 32px 16px; text-align: center; color: var(--text-3); }
   iframe { position: fixed; top: var(--sat); left: 0; right: var(--panel-w); bottom: 0; width: calc(100% - var(--panel-w)); height: calc(100% - var(--sat)); border: 0; display: block; }
+  .desk iframe { top: calc(var(--sat) + 48px); height: calc(100% - var(--sat) - 48px); }
 </style>

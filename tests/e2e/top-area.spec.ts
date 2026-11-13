@@ -32,7 +32,10 @@ test('다크', async ({ page }) => {
   expect(await chrome(page)).toEqual(READ_D);
 });
 
+const isDesktop = (page: any) => page.viewportSize()!.width >= 768;
+
 test('safe-area: 상단 띠 높이만큼 iframe이 내려가고 화면 맨 아래까지 닿는다', async ({ page }) => {
+  test.skip(isDesktop(page), '모바일 레이아웃 전용 (PC는 상단 바 아래에서 시작한다)');
   await page.goto('/');
   const id = await importFixture(page, '10-single.html');
   await openBook(page, id);
@@ -44,6 +47,18 @@ test('safe-area: 상단 띠 높이만큼 iframe이 내려가고 화면 맨 아�
   expect(await page.getByTestId('top-inset').evaluate((e) => getComputedStyle(e).position)).toBe('fixed');
   expect(frame!.y).toBe(47);
   expect(Math.round(frame!.y + frame!.height)).toBe(vh);                       // 하단 여백 띠 없음
+});
+
+test('safe-area(PC): iframe은 상단 띠 + 48px 상단 바 아래에서 시작해 화면 맨 아래까지 닿는다', async ({ page }) => {
+  test.skip(!isDesktop(page), 'PC 레이아웃 전용');
+  await page.goto('/');
+  const id = await importFixture(page, '10-single.html');
+  await openBook(page, id);
+  await page.addStyleTag({ content: ':root{--sat:47px;--sab:34px}' });
+  const vh = page.viewportSize()!.height;
+  const frame = (await page.getByTestId('reader-frame').boundingBox())!;
+  expect(frame.y).toBe(47 + 48);
+  expect(Math.round(frame.y + frame.height)).toBe(vh);
 });
 
 test('문서 내용은 원본 색 그대로(앱 테마가 iframe에 새지 않는다)', async ({ page }) => {

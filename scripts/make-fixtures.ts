@@ -142,7 +142,7 @@ export function makeFixtures(outDir: string, opts: { big?: boolean } = {}): void
         body: '<img src="img/none.png"><img src="https://example.invalid/x.png">',
       })),
     ]),
-    '09-click-handlers.zip': z([f('index.html', clickPage())]),
+    '09-click-handlers.zip': z([f('index.html', clickPage()), f('page2.html', page({ title: '두 번째', h1: 'page2' }))]),
     '10-single.html': long({ title: 'Document', h1: 'single' }),
     '11-sw-killer.zip': z([
       f('index.html', page({
@@ -199,7 +199,7 @@ ${sec('<p id="onclick" onclick="this.setAttribute(\'data-clicked\',(+this.getAtt
 ${sec('<div role="tab" id="tab1" aria-selected="true">탭 1</div> <div role="tab" id="tab2" aria-selected="false">탭 2</div>')}
 ${sec('<p id="pointer">포인터 문단입니다.</p>')}
 ${sec('<p id="prevent">preventDefault 문단입니다.</p>')}
-${sec('<a id="link" href="#x">링크</a> <input id="inp">')}
+${sec('<a id="link" href="#x">링크</a> <input id="inp"> <a id="next" href="page2.html">다음</a>')}
 <script>
 document.getElementById('handler').addEventListener('click', function () {
   this.setAttribute('data-clicked', (+this.getAttribute('data-clicked') || 0) + 1);
@@ -212,6 +212,7 @@ document.querySelectorAll('[role=tab]').forEach(function (t) {
 document.addEventListener('click', function (e) {
   if (e.target instanceof Element && e.target.closest('#prevent')) e.preventDefault();
 }, true);
+document.addEventListener('keydown', function (e) { if (e.key === ']' && e.target.id !== 'inp') e.preventDefault(); });
 </script>
 </body></html>
 `;
