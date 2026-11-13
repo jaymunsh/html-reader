@@ -35,8 +35,8 @@ export async function idbAll(page: Page, store: string): Promise<any[]> {
 }
 
 /** Pick the file and click through the entry dialogs (iOS notices, safety notice). Does not wait for the result. */
-export async function startImport(page: Page, name: string): Promise<void> {
-  await page.getByTestId('import-input').setInputFiles(fixture(name));
+export async function startImport(page: Page, name: string | string[]): Promise<void> {
+  await page.getByTestId('import-input').setInputFiles(typeof name === 'string' ? fixture(name) : name.map(fixture));
   const dialogs = [
     page.getByTestId('ios-continue-tab'),
     page.getByTestId('ios-temp-ok'),

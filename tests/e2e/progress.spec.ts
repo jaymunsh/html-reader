@@ -68,6 +68,26 @@ test('내부 div 스크롤 컨테이너 문서', async ({ page }) => {
   await expect.poll(() => f.locator('#scroller').evaluate((e) => e.scrollTop / (e.scrollHeight - e.clientHeight)), { timeout: 6000 }).toBeCloseTo(0.5, 1);
 });
 
+test('html/body가 overflow:hidden이면 루트는 스크롤되지 않는 것으로 보고 읽음 처리한다', async ({ page }) => {
+  await page.goto('/');
+  const id = await importFixture(page, '04-root-hidden.zip');
+  await openBook(page, id);
+  await expect.poll(async () => (await prog(page, id, 'index.html'))?.maxPct, { timeout: 5000 }).toBe(100);
+  expect((await prog(page, id, 'index.html')).read).toBe(true);
+});
+
+test('100vh body + 기본 여백 + 내부 main 스크롤: 첫 화면에서 읽음이 되지 않고 main을 따라간다', async ({ page }) => {
+  await page.goto('/');
+  const id = await importFixture(page, '04-margin-inner.zip');
+  const f = await openBook(page, id);
+  await expect.poll(async () => (await prog(page, id, 'index.html'))?.maxPct, { timeout: 5000 }).toBeGreaterThan(0);
+  const first = await prog(page, id, 'index.html');
+  expect(first.maxPct).toBeLessThan(50);
+  expect(first.read).toBe(false);
+  await f.locator('#scroller').evaluate((e) => { e.scrollTop = (e.scrollHeight - e.clientHeight) * 0.5; });
+  await expect.poll(async () => (await prog(page, id, 'index.html'))?.lastScrollRatio, { timeout: 5000 }).toBeCloseTo(0.5, 1);
+});
+
 test('서재로 나갈 때·탭이 숨겨질 때 즉시 저장', async ({ page }) => {
   await page.goto('/');
   const id = await importFixture(page, '10-single.html');

@@ -18,6 +18,8 @@ test.each([
   ['<header>는 head가 아니다', '<header>x</header>', `${TAG}<header>x</header>`],
   ['주석 안의 <head>는 건너뛴다', '<!doctype html><!-- <head> --><html><head><title>', `<!doctype html><!-- <head> --><html><head>${TAG}<title>`],
   ['빈 문서', '', TAG],
+  ['head 없는 문서: <body> 뒤 스크립트 속 "<head>"는 보지 않는다', '<!doctype html><html><body><script>s="<head>"</script>',
+    `<!doctype html><html>${TAG}<body><script>s="<head>"</script>`],
 ])('%s', (_n, input, want) => expect(inj(input)).toBe(want));
 
 test('BOM 뒤에 넣는다', () => {

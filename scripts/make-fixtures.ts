@@ -102,6 +102,16 @@ export function makeFixtures(outDir: string, opts: { big?: boolean } = {}): void
         `<style>html,body{height:100%;margin:0;overflow:hidden}</style></head>\n<body><div id="scroller" style="height:100vh;overflow-y:auto">` +
         `<h1 id="h">inner</h1>\n${paras(200)}\n</div></body></html>\n`),
     ]),
+    // Root clipped by html/body overflow:hidden, no inner scroller: the page cannot scroll, so it counts as read.
+    '04-root-hidden.zip': z([
+      f('index.html', long({ title: '루트 잠김', head: '<style>html,body{overflow:hidden}</style>', h1: 'locked' })),
+    ]),
+    // 100vh body + default 8px margin overflows the root by 16px; the real scroller is the inner <main>.
+    '04-margin-inner.zip': z([
+      f('index.html', `<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><title>여백 내부 스크롤</title>` +
+        `<style>body{height:100vh}main{height:100%;overflow:auto}</style></head>\n<body><main id="scroller">` +
+        `<h1 id="h">margin</h1>\n${paras(200)}\n</main></body></html>\n`),
+    ]),
     '05-cp949-name.zip': z([
       { name: encodeEucKr('한글.html'), utf8Flag: false, data: page({ title: '한글', h1: 'ko' }) },
       { name: enc.encode('index.html'), utf8Flag: false, data: long({ title: 'CP949', h1: 'index', body: `<p><a id="ko" href="${encodeURIComponent('한글.html')}">ko</a></p>` }) },

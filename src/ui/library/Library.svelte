@@ -14,6 +14,7 @@
   let input: HTMLInputElement;
   let flow: ImportFlow;
   let dragging = $state(false);
+  let importing = $state(false);
 
   type Dlg = 'ios' | 'temp' | 'safety' | { del: Book };
   let dlg = $state<Dlg | null>(null);
@@ -97,6 +98,9 @@
     void enter([...e.dataTransfer!.files]);
   }
 
+  // Opening a book unmounts the library and with it the running import (and its entry choice): not while importing.
+  function open(id: string) { if (!importing && !draining) onopen(id); }
+
   async function confirmDelete() {
     const d = dlg;
     reply(true);
@@ -115,10 +119,10 @@
   <button type="button" data-testid="import-button" onclick={() => input.click()}>가져오기</button>
   <input bind:this={input} type="file" data-testid="import-input" hidden multiple
     accept=".zip,.html,.htm,application/zip,text/html" {onchange} />
-  <ImportFlow bind:this={flow} onimported={refresh} />
+  <ImportFlow bind:this={flow} bind:busy={importing} onimported={refresh} />
   {#each books as book (book.id)}
     {@const bp = bookProgress(book.pagePaths, progress.get(book.id) ?? new Map())}
-    <BookCard {book} pct={bp.pct} readCount={bp.readCount} {onopen} ondelete={(b) => void ask({ del: b })} />
+    <BookCard {book} pct={bp.pct} readCount={bp.readCount} onopen={open} ondelete={(b) => void ask({ del: b })} />
   {/each}
 </main>
 

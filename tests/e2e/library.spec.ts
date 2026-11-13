@@ -111,3 +111,49 @@ test('안내 대화상자가 열린 동안 고른 두 번째 파일도 순서대
   expect(books.map((b) => b.sourceName)).toEqual(['10-single', '01-multipage']);
   await expect(page.getByTestId('safety-notice')).toHaveCount(0);
 });
+
+test('워커가 쓰기를 끝낸 뒤 페이지가 커밋하기 전까지도 가져오기 잠금이 유지되어 정리가 캐시를 지우지 않는다', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-cleanup', 'done', { timeout: 10_000 });
+  await importFixture(page, '10-single.html');                              // 고지를 미리 통과
+  // At the worker's `ready` (cache written, nothing verified or committed yet), run a cleanup as another tab would.
+  // This listener runs before client.ts's onmessage, so it sees exactly the old worker→page lock gap.
+  await page.evaluate(() => {
+    const w = window as any;
+    const Base = window.Worker;
+    w.Worker = class extends Base {
+      constructor(u: string | URL, o?: WorkerOptions) {
+        super(u, o);
+        this.addEventListener('message', (e: MessageEvent) => {
+          if (e.data?.type !== 'ready') return;
+          w.__atReady = Promise.all([navigator.locks.query(), w.__hrTest.cleanupOrphans()]).then(([q, c]) => ({
+            held: !!q.held?.some((l) => l.name === 'html-reader-import'), skipped: c.skipped, cacheName: e.data.cacheName,
+          }));
+        });
+      }
+    };
+  });
+  const id = await importFixture(page, '01-multipage.zip');
+  const r = await page.evaluate(() => (window as any).__atReady);
+  expect(r).toEqual({ held: true, skipped: true, cacheName: `book-${id}-v1` });
+  expect(await page.evaluate((n) => caches.has(n), r.cacheName)).toBe(true);
+  const f = await openBook(page, id);
+  await expect(f.locator('#h')).toHaveText('index');
+});
+
+test('시작 페이지를 고르는 동안에는 책이 열리지 않고, 고른 뒤 가져오기가 끝나며 다음 가져오기도 된다', async ({ page }) => {
+  await page.goto('/');
+  const first = await importFixture(page, '10-single.html');
+  await startImport(page, 'pick-entry.zip');
+  await expect(page.getByTestId('entry-choice').first()).toBeVisible();
+  const card = page.locator(`[data-book-id="${first}"]`);
+  await card.click({ force: true });                                         // 화면 위 클릭은 scrim이 받는다
+  await card.dispatchEvent('click');                                         // scrim을 건너뛰어도 가드가 막는다
+  await page.waitForTimeout(300);
+  await expect(page.getByTestId('reader')).toHaveCount(0);
+  await expect(page.getByTestId('entry-choice').first()).toBeVisible();
+  await page.locator('[data-testid=entry-choice][data-path="a.html"]').click();
+  await expect(page.getByTestId('book-card')).toHaveCount(2);
+  await importFixture(page, '01-multipage.zip');
+  await expect(page.getByTestId('book-card')).toHaveCount(3);
+});

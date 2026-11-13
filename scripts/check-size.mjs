@@ -5,6 +5,7 @@ const gz = (p) => gzipSync(readFileSync(`dist/${p}`)).length;
 const html = readFileSync('dist/index.html', 'utf8');
 const refs = [...html.matchAll(/<script[^>]*type="module"[^>]*src="([^"]+)"/g), ...html.matchAll(/<link[^>]*rel="modulepreload"[^>]*href="([^"]+)"/g)]
   .map((m) => m[1].replace(/^\//, ''));
+if (!refs.length) { console.error('no module script or modulepreload refs in dist/index.html'); process.exit(1); }
 const initial = [...new Set(refs)].reduce((s, p) => s + gz(p), 0);
 const agent = gz('__reader/agent.js');
 

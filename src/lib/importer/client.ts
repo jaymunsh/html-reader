@@ -11,21 +11,20 @@ export interface ImportHooks {
 }
 
 /**
+ * The page holds ONE import lock for the whole import (worker write -> entry choice -> verify -> terminate -> commit),
+ * so a concurrent cleanupOrphans (any tab) can never delete the in-flight cache. The page outlives the worker.
  * The worker stays alive while the page verifies: on WebKit (with a controlling service worker) Cache API
- * writes made by a worker are dropped if it is terminated right after finishing. Verify, terminate and commit
- * run under ONE import lock so a concurrent cleanupOrphans cannot delete the cache between verify and commit.
+ * writes made by a worker are dropped if it is terminated right after finishing.
  */
 async function commitReady(p: ReadyPayload, terminate: () => void): Promise<string> {
   try {
-    return await withImportLock(async () => {
-      const ok = await verifyCacheReady(caches, p);
-      terminate();
-      if (!ok) throw new ImportError('failed', 'cache verification timed out');
-      // Titles may have changed since the worker planned this book (concurrent imports).
-      const title = dedupeTitle(p.baseTitle, (await listBooks()).map((b) => b.title));
-      await commitNewBook({ ...p.book, title }, p.bookFiles, p.texts);
-      return p.book.id;
-    });
+    const ok = await verifyCacheReady(caches, p);
+    terminate();
+    if (!ok) throw new ImportError('failed', 'cache verification timed out');
+    // Titles may have changed since the worker planned this book (concurrent imports).
+    const title = dedupeTitle(p.baseTitle, (await listBooks()).map((b) => b.title));
+    await commitNewBook({ ...p.book, title }, p.bookFiles, p.texts);
+    return p.book.id;
   } catch (e) {
     terminate();
     await caches.delete(p.cacheName).catch(() => {});
@@ -33,8 +32,9 @@ async function commitReady(p: ReadyPayload, terminate: () => void): Promise<stri
   }
 }
 
+/** Settles only after the cache is committed or deleted; chooseEntry must settle too, or the lock is held. */
 export function importFile(file: File, mode: ImportMode, hooks: ImportHooks): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return withImportLock(() => new Promise<string>((resolve, reject) => {
     const worker = new Worker(new URL('./importer.worker.ts', import.meta.url), { type: 'module' });
     // Once the worker reported `ready`, only commitReady settles the promise; late worker events are ignored.
     let readySeen = false;
@@ -58,7 +58,7 @@ export function importFile(file: File, mode: ImportMode, hooks: ImportHooks): Pr
       finish(() => reject(new ImportError('failed', e.message)));
     };
     worker.postMessage({ type: 'start', file, mode });
-  });
+  }));
 }
 
 export async function findBySourceName(sourceName: string): Promise<Book | undefined> {

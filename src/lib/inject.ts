@@ -117,7 +117,7 @@ export function planInjection(
       if (e < 0) break;
       if (headEnd < 0) headEnd = e;
       i = e;
-    } else if (headEnd >= 0 && (startsWith(v, i, P.headClose) || named(P.body))) {
+    } else if (named(P.body) || (headEnd >= 0 && startsWith(v, i, P.headClose))) {
       break scan;
     } else if (headEnd >= 0 && metaStart < 0 && named(P.meta)) {
       const e = tagEnd(v, i);

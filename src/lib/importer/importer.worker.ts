@@ -6,7 +6,7 @@ import { extractText } from '../text-extract';
 import { mimeFor } from '../mime';
 import { cacheKey, naturalComparePaths } from '../path';
 import { readCentralDirectory, readEntry } from '../zip';
-import { cacheNameFor, listBooks, newBookId, withImportLock } from '../storage';
+import { cacheNameFor, listBooks, newBookId } from '../storage';
 import type { Book, BookFiles, TextRecord } from '../storage';
 import type { ReadyPayload } from './verify';
 import type { ImportMode } from './client';
@@ -48,65 +48,63 @@ async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
   const items = await loadItems(file);
   if (!items.some((i) => isHtmlPath(i.path))) throw new ImportError('no-html');
   const total = items.reduce((s, i) => s + i.size, 0);
-  // The lock covers the cache writes only; the page verifies the cache after this worker is gone and
-  // commits to IndexedDB under the same lock (see client.ts). Committing here could leave a book record
-  // whose cache entries WebKit dropped when the worker was terminated.
-  return withImportLock(async () => {
-    const bookId = newBookId();
-    const cacheName = cacheNameFor(bookId, 1);
-    try {
-      const cache = await caches.open(cacheName);
-      const pagePaths: string[] = [];
-      const titles: Record<string, string> = {};
-      const texts: TextRecord[] = [];
-      const sizes: Record<string, number> = {};
-      let done = 0;
-      let lastPost = 0;
-      const onBytes = (n: number) => {
-        done += n;
-        const now = Date.now();
-        if (now - lastPost > 50 || done >= total) { lastPost = now; post({ type: 'progress', done, total }); }
-      };
-      for (const item of items) {
-        const blob = await item.read(onBytes);
-        let type = mimeFor(item.path);
-        if (isHtmlPath(item.path)) {
-          const bytes = new Uint8Array(await blob.arrayBuffer());
-          if (isFullDocument(bytes)) pagePaths.push(item.path);
-          titles[item.path] = extractTitle(decodeHtml(bytes).html);
-          texts.push({ bookId, path: item.path, text: extractText(bytes) });
-          const src = detectEncoding(bytes);
-          if (src.source === 'utf8' || src.source === 'fallback') type += `; charset=${src.encoding}`;
-        }
-        sizes[item.path] = blob.size;
-        await cache.put(cacheKey(bookId, item.path), new Response(blob, {
-          headers: { 'Content-Type': type, 'Content-Length': String(blob.size) },
-        }));
-      }
-      pagePaths.sort(naturalComparePaths);
-      if (!pagePaths.length) throw new ImportError('no-html');
-      let entryPath = pickEntryPath(pagePaths);
-      if (entryPath === null) {
-        entryPath = await askEntry(pagePaths);
-        if (entryPath === null) throw new ImportError('cancelled');
-      }
-      const sourceName = sourceNameOf(file.name).normalize('NFC');
-      const existing = (await listBooks()).map((b) => b.title);
-      const baseTitle = defaultTitle(titles[entryPath] ?? '', sourceName);
-      const title = dedupeTitle(baseTitle, existing);
+  // No lock here: the page holds the import lock for the whole import (see client.ts), verifies the cache after
+  // this worker is gone and only then commits to IndexedDB. Committing here could leave a book record whose
+  // cache entries WebKit dropped when the worker was terminated.
+  const bookId = newBookId();
+  const cacheName = cacheNameFor(bookId, 1);
+  try {
+    const cache = await caches.open(cacheName);
+    const pagePaths: string[] = [];
+    const titles: Record<string, string> = {};
+    const texts: TextRecord[] = [];
+    const sizes: Record<string, number> = {};
+    let done = 0;
+    let lastPost = 0;
+    const onBytes = (n: number) => {
+      done += n;
       const now = Date.now();
-      const book: Book = {
-        id: bookId, title, sourceName, cacheName, entryPath, pagePaths, fileCount: items.length, totalBytes: total,
-        importedAt: now, lastOpenedAt: 0, lastPath: entryPath, textScale: 1,
-      };
-      if ((await cache.keys()).length !== items.length) throw new ImportError('failed', 'cache write verification failed');
-      const bookFiles: BookFiles = { bookId, paths: items.map((i) => i.path), titles };
-      return { book, bookFiles, texts, cacheName, entrySize: sizes[entryPath], baseTitle };
-    } catch (e) {
-      await caches.delete(cacheName).catch(() => {});
-      throw e;
+      if (now - lastPost > 50 || done >= total) { lastPost = now; post({ type: 'progress', done, total }); }
+    };
+    for (const item of items) {
+      const blob = await item.read(onBytes);
+      let type = mimeFor(item.path);
+      if (isHtmlPath(item.path)) {
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        if (isFullDocument(bytes)) pagePaths.push(item.path);
+        titles[item.path] = extractTitle(decodeHtml(bytes).html);
+        texts.push({ bookId, path: item.path, text: extractText(bytes) });
+        const src = detectEncoding(bytes);
+        if (src.source === 'utf8' || src.source === 'fallback') type += `; charset=${src.encoding}`;
+      }
+      sizes[item.path] = blob.size;
+      await cache.put(cacheKey(bookId, item.path), new Response(blob, {
+        headers: { 'Content-Type': type, 'Content-Length': String(blob.size) },
+      }));
     }
-  });
+    pagePaths.sort(naturalComparePaths);
+    if (!pagePaths.length) throw new ImportError('no-html');
+    let entryPath = pickEntryPath(pagePaths);
+    if (entryPath === null) {
+      entryPath = await askEntry(pagePaths);
+      if (entryPath === null) throw new ImportError('cancelled');
+    }
+    const sourceName = sourceNameOf(file.name).normalize('NFC');
+    const existing = (await listBooks()).map((b) => b.title);
+    const baseTitle = defaultTitle(titles[entryPath] ?? '', sourceName);
+    const title = dedupeTitle(baseTitle, existing);
+    const now = Date.now();
+    const book: Book = {
+      id: bookId, title, sourceName, cacheName, entryPath, pagePaths, fileCount: items.length, totalBytes: total,
+      importedAt: now, lastOpenedAt: 0, lastPath: entryPath, textScale: 1,
+    };
+    if ((await cache.keys()).length !== items.length) throw new ImportError('failed', 'cache write verification failed');
+    const bookFiles: BookFiles = { bookId, paths: items.map((i) => i.path), titles };
+    return { book, bookFiles, texts, cacheName, entrySize: sizes[entryPath], baseTitle };
+  } catch (e) {
+    await caches.delete(cacheName).catch(() => {});
+    throw e;
+  }
 }
 
 self.onmessage = (ev: MessageEvent<In>) => {

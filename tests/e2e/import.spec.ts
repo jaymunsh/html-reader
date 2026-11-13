@@ -65,3 +65,15 @@ for (const [file, code] of [['err-encrypted.zip', 'encrypted'], ['err-nohtml.zip
     await expect(page.getByTestId('book-card')).toHaveCount(0);
   });
 }
+
+test('묶음 가져오기: 앞 파일의 오류가 뒤 파일을 가져온 뒤에도 남고, 확인을 눌러야 사라진다', async ({ page }) => {
+  await page.goto('/');
+  await startImport(page, ['err-crc.zip', '10-single.html']);
+  await expect(page.getByTestId('book-card')).toHaveCount(1);
+  const err = page.getByTestId('import-error');
+  await expect(err).toHaveCount(1);
+  await expect(err).toHaveAttribute('data-code', 'crc-mismatch');
+  await expect(err).toContainText('err-crc.zip');
+  await err.getByTestId('confirm-ok').click();
+  await expect(err).toHaveCount(0);
+});

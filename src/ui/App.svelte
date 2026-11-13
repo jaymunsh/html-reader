@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { cleanupOrphans } from '../lib/storage';
+  import { cleanupOrphans, importRunning } from '../lib/storage';
   import Library from './library/Library.svelte';
   import { applyTheme, resolveTheme, setChromeColor } from './chrome';
   import { applyUpdate, hasWaitingUpdate, watchForUpdate } from './sw-client';
@@ -23,7 +23,8 @@
     screen = { name: 'library' };
     let wanted = false;
     try { wanted = sessionStorage.getItem('update-wanted') === '1'; } catch { /* ignore */ }
-    if (hasWaitingUpdate() || wanted) applyUpdate();
+    // Applying reloads every tab: never while an import (any tab) is running; the banner stays for later.
+    if (hasWaitingUpdate() || wanted) void importRunning().then((busy) => { if (!busy) applyUpdate(); });
   }
 
   $effect(() => { document.documentElement.dataset.screen = screen.name; setChromeColor(screen.name); });

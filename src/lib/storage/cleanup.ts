@@ -10,6 +10,12 @@ export function withImportLock<T>(fn: () => Promise<T>): Promise<T> {
   return hasLocks() ? navigator.locks.request(IMPORT_LOCK, fn) : fn();
 }
 
+/** True while any tab holds the import lock. */
+export async function importRunning(): Promise<boolean> {
+  if (!hasLocks()) return false;
+  try { return !!(await navigator.locks.query()).held?.some((l) => l.name === IMPORT_LOCK); } catch { return false; }
+}
+
 async function removeOrphanRecords(): Promise<void> {
   await withTx(['books', 'bookFiles', 'texts', 'progress', 'bookmarks', 'issues'], 'readwrite', async (tx) => {
     const live = new Set((await req(tx.objectStore('books').getAllKeys())) as string[]);
