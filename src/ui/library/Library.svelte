@@ -8,6 +8,8 @@
   import BookCard from './BookCard.svelte';
   import Icon from '../icons/Icon.svelte';
   import ImportFlow from './ImportFlow.svelte';
+  import Dialog from './Dialog.svelte';
+  import { layout } from '../layout.svelte';
 
   let books = $state<Book[]>([]);
   let issues = $state(new Map<string, Issue[]>());
@@ -17,6 +19,9 @@
   let flow: ImportFlow;
   let dragging = $state(false);
   let importing = $state(false);
+  let pct = $state(0);
+  let flowModal = $state(false);
+  let loaded = $state(false);
 
   type Dlg = 'ios' | 'temp' | 'safety' | { del: Book };
   let dlg = $state<Dlg | null>(null);
@@ -39,6 +44,7 @@
     const m = new Map<string, Map<string, PageProgress>>();
     for (const p of prog) (m.get(p.bookId) ?? m.set(p.bookId, new Map()).get(p.bookId)!).set(p.path, p);
     progress = m;
+    loaded = true;
   }
   onMount(() => {
     void refresh();
@@ -59,7 +65,7 @@
 
   // Entry gates (iOS tab notice, safety notice) run once per pick/drop; files then import one at a time, in order.
   const queue: File[] = [];
-  let draining = false;
+  let draining = $state(false);
   async function drain() {
     if (draining) return;
     draining = true;
@@ -104,7 +110,8 @@
   }
 
   // Opening a book unmounts the library and with it the running import (and its entry choice): not while importing.
-  function open(id: string) { if (!importing && !draining) onopen(id); }
+  const busy = $derived(importing || draining);
+  function open(id: string) { if (!busy) onopen(id); }
 
   async function confirmDelete() {
     const d = dlg;
@@ -113,65 +120,131 @@
   }
 </script>
 
-<main data-testid="library" class:dragging {ondragover} {ondrop} ondragleave={(e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) dragging = false; }}>
-  {#if updateReady}
-    <div class="update" role="status" data-testid="update-banner">
-      <span>업데이트 준비됨</span>
-      <button type="button" data-testid="update-apply" onclick={onapply}>적용</button>
-    </div>
-  {/if}
-  <div class="title">
-    <h1>서재</h1>
-    <button type="button" class="icon" data-testid="settings-button" aria-label="설정" onclick={onsettings}><Icon name="settings" /></button>
+<main data-testid="library" class:desk={layout.desktop} class:dragging inert={!!dlg || flowModal} {ondragover} {ondrop}
+  ondragleave={(e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) dragging = false; }}>
+  <div class="wrap">
+    {#if updateReady}
+      <div class="update" role="status" data-testid="update-banner">
+        <span>업데이트 준비됨</span>
+        <!-- Applying reloads every tab: not while an import is running here. -->
+        <button type="button" data-testid="update-apply" disabled={busy} onclick={onapply}>적용</button>
+      </div>
+    {/if}
+    <header class="title">
+      <h1>서재</h1>
+      <button type="button" class="icon" data-testid="settings-button" aria-label="설정" onclick={onsettings}><Icon name="settings" /></button>
+    </header>
+    {#if books.length}
+      <div class="list">
+        {#each books as book (book.id)}
+          {@const bp = bookProgress(book.pagePaths, progress.get(book.id) ?? new Map())}
+          {@const bi = issues.get(book.id) ?? []}
+          <BookCard {book} pct={bp.pct} readCount={bp.readCount} missing={missingCount(bi)} online={bi.some((i) => i.kind === 'external')} onopen={open} ondelete={(b) => void ask({ del: b })} />
+        {/each}
+      </div>
+    {:else if loaded}
+      <div class="empty">
+        <span class="empty-icon"><Icon name="folder" size={32} /></span>
+        <p>아직 문서가 없습니다. ZIP 또는 HTML 파일을 가져오세요.</p>
+      </div>
+    {/if}
   </div>
-  <button type="button" data-testid="import-button" onclick={() => input.click()}>가져오기</button>
+  <div class="bar" data-bar>
+    <div class="bar-in">
+      <!-- Left: the search input's place (P3-8); shows the import progress meanwhile. -->
+      <div class="slot">
+        {#if importing}
+          <div class="progress" data-testid="import-progress" role="status">
+            <span>가져오는 중… {pct}%</span>
+            <i><b style:transform={`scaleX(${pct / 100})`}></b></i>
+          </div>
+        {/if}
+      </div>
+      <button type="button" class="import" data-testid="import-button" onclick={() => input.click()}><Icon name="plus" size={20} />가져오기</button>
+    </div>
+  </div>
   <input bind:this={input} type="file" data-testid="import-input" hidden multiple
     accept=".zip,.html,.htm,application/zip,text/html" {onchange} />
-  <ImportFlow bind:this={flow} bind:busy={importing} onimported={refresh} />
-  {#each books as book (book.id)}
-    {@const bp = bookProgress(book.pagePaths, progress.get(book.id) ?? new Map())}
-    {@const bi = issues.get(book.id) ?? []}
-    <BookCard {book} pct={bp.pct} readCount={bp.readCount} missing={missingCount(bi)} online={bi.some((i) => i.kind === 'external')} onopen={open} ondelete={(b) => void ask({ del: b })} />
-  {/each}
 </main>
 
-{#if dlg}<div class="scrim"></div>{/if}
+<ImportFlow bind:this={flow} bind:busy={importing} bind:pct bind:modal={flowModal} held={!!dlg} onimported={refresh} />
+
 {#if dlg === 'ios'}
-  <div class="dialog" role="dialog" aria-modal="true" data-testid="ios-notice">
-    <h2>홈 화면에 추가해서 쓰세요</h2>
+  <Dialog title="홈 화면에 추가해서 쓰세요" testid="ios-notice" oncancel={() => reply(false)}>
     <p>공유 버튼 → "홈 화면에 추가"로 설치하면 문서가 앱 저장소에 안전하게 보관됩니다.</p>
-    <button type="button" data-testid="ios-continue-tab" onclick={() => reply(true)}>탭에서 계속</button>
-    <button type="button" data-testid="confirm-cancel" onclick={() => reply(false)}>취소</button>
-  </div>
+    <div class="actions">
+      <button type="button" class="primary" data-testid="ios-continue-tab" onclick={() => reply(true)}>탭에서 계속</button>
+      <button type="button" data-testid="confirm-cancel" onclick={() => reply(false)}>취소</button>
+    </div>
+  </Dialog>
 {:else if dlg === 'temp'}
-  <div class="dialog" role="dialog" aria-modal="true" data-testid="ios-temp-warning">
+  <Dialog title="탭에서 계속합니다" testid="ios-temp-warning">
     <p>임시 보관 — 홈 화면 앱에서는 보이지 않으며 지워질 수 있음</p>
-    <button type="button" data-testid="ios-temp-ok" onclick={() => reply(true)}>확인</button>
-  </div>
+    <div class="actions"><button type="button" class="primary" data-testid="ios-temp-ok" onclick={() => reply(true)}>확인</button></div>
+  </Dialog>
 {:else if dlg === 'safety'}
-  <div class="dialog" role="dialog" aria-modal="true" data-testid="safety-notice">
+  <Dialog title="신뢰하는 문서만 가져오세요" testid="safety-notice">
     <p>직접 만들었거나 신뢰하는 문서만 가져오세요. 문서 안의 스크립트는 이 앱의 저장 데이터에 접근할 수 있습니다.</p>
-    <button type="button" data-testid="confirm-ok" onclick={() => reply(true)}>확인</button>
-  </div>
+    <div class="actions"><button type="button" class="primary" data-testid="confirm-ok" onclick={() => reply(true)}>확인</button></div>
+  </Dialog>
 {:else if dlg}
-  <div class="dialog" role="dialog" aria-modal="true">
+  <Dialog title="문서 삭제" oncancel={() => reply(false)}>
     <p>"{dlg.del.title}" 문서를 삭제할까요? 진행률과 북마크도 함께 지워집니다.</p>
-    <button type="button" data-testid="confirm-ok" onclick={confirmDelete}>삭제</button>
-    <button type="button" data-testid="confirm-cancel" onclick={() => reply(false)}>취소</button>
-  </div>
+    <div class="actions">
+      <button type="button" class="danger" data-testid="confirm-ok" onclick={confirmDelete}>삭제</button>
+      <button type="button" data-testid="confirm-cancel" data-autofocus onclick={() => reply(false)}>취소</button>
+    </div>
+  </Dialog>
 {/if}
 
 <style>
-  main { min-height: 100vh; padding: calc(16px + var(--sat)) 16px 16px; box-sizing: border-box; }
+  main {
+    min-height: 100vh; box-sizing: border-box; color: var(--text);
+    padding: calc(20px + var(--sat)) max(16px, env(safe-area-inset-right)) calc(64px + var(--sab) + 24px) max(16px, env(safe-area-inset-left));
+  }
+  main.desk { padding-left: 32px; padding-right: 32px; }
   main.dragging { outline: 2px dashed var(--accent); outline-offset: -8px; background: var(--accent-soft); }
-  .dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(90vw, 360px);
-    padding: 20px; border-radius: var(--r-sheet); background: var(--surface); }
-.title { display: flex; align-items: center; justify-content: space-between; }
-  .title h1 { margin: 0; }
-  .icon { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--text); border-radius: var(--r-control); }
-  .update { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; margin-bottom: 12px;
-    border-radius: var(--r-control); background: var(--info-bg); color: var(--info-fg); }
-  .update button { min-height: 44px; padding: 0 16px; border-radius: var(--r-control); }
-  .scrim { position: fixed; inset: 0; z-index: 19; background: var(--scrim); }
-  .dialog button { min-height: 44px; border-radius: var(--r-control); margin-right: 8px; }
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  .title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 16px; }
+  .title h1 { margin: 0; font-size: 34px; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; }
+  .desk .title { margin: 16px 0 24px; }
+  .icon {
+    width: 44px; height: 44px; flex: none; display: grid; place-items: center; padding: 0; border: 0; cursor: pointer;
+    border-radius: var(--r-control); background: var(--surface); color: var(--text); box-shadow: var(--shadow-card);
+  }
+  .list { display: flex; flex-direction: column; gap: 10px; }
+  .desk .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+  .empty { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 72px 24px; text-align: center; }
+  .empty-icon { width: 64px; height: 64px; display: grid; place-items: center; border-radius: var(--r-card); background: var(--surface); color: var(--text-3); box-shadow: var(--shadow-card); }
+  .empty p { margin: 0; max-width: 260px; font-size: 15px; line-height: 1.55; color: var(--text-3); text-wrap: balance; word-break: keep-all; }
+  .update {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 6px 6px 16px; margin-bottom: 12px;
+    border-radius: var(--r-control); background: var(--info-bg); color: var(--info-fg); font-size: 15px; font-weight: 600;
+  }
+  .update button {
+    min-height: 44px; padding: 0 16px; border: 0; border-radius: var(--r-control); background: var(--surface); color: var(--info-fg);
+    font: inherit; cursor: pointer;
+  }
+  .update button:disabled { opacity: .5; cursor: default; }
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding-bottom: var(--sab);
+    background: var(--bar); -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
+    border-top: 1px solid var(--hairline);
+  }
+  .bar-in {
+    display: flex; align-items: center; gap: 12px; height: 64px; box-sizing: border-box; max-width: 1040px; margin: 0 auto;
+    padding: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+  }
+  .desk .bar-in { max-width: calc(1040px + 64px); padding: 0 32px; }
+  .slot { flex: 1; min-width: 0; }
+  .progress { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .progress i { display: block; height: 4px; max-width: 220px; border-radius: 2px; background: var(--accent-soft); overflow: hidden; }
+  .progress b { display: block; height: 100%; background: var(--accent); transform-origin: left; transition: transform .2s ease; }
+  .import {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 18px 0 14px;
+    border: 0; border-radius: var(--r-control); background: var(--accent); color: var(--surface);
+    font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform .15s ease;
+  }
+  .import:active { transform: scale(.97); }
+  .import:focus-visible, .icon:focus-visible, .update button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>

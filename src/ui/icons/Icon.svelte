@@ -1,6 +1,6 @@
 <script lang="ts" module>
   export type IconName = 'back' | 'search' | 'bookmark' | 'bookmark-filled' | 'menu' | 'to-top' | 'to-bottom' | 'prev' | 'next'
-    | 'close' | 'more' | 'settings' | 'warning' | 'cloud' | 'check' | 'chevron-up' | 'chevron-down' | 'folder' | 'file' | 'panel';
+    | 'close' | 'more' | 'settings' | 'warning' | 'cloud' | 'check' | 'chevron-up' | 'chevron-down' | 'folder' | 'file' | 'panel' | 'plus';
   const P: Record<IconName, string> = {
     back: 'M15 5l-7 7 7 7',
     prev: 'M15 5l-7 7 7 7',
@@ -22,6 +22,7 @@
     folder: 'M3 7a1 1 0 011-1h5l2 2h8a1 1 0 011 1v9a1 1 0 01-1 1H4a1 1 0 01-1-1z',
     file: 'M7 3h7l5 5v12a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1zM14 3v5h5',
     panel: 'M4 5h16v14H4zM15 5v14',
+    plus: 'M12 5v14M5 12h14',
   };
 </script>
 

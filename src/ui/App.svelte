@@ -55,7 +55,7 @@
 {:else if screen.name === 'settings'}
   <Settings onback={() => (screen = { name: 'library' })} />
 {:else}
-  <Library {updateReady} onapply={applyUpdate} onsettings={() => (screen = { name: 'settings' })} onopen={(id) => (screen = { name: 'reader', id, path: null })} />
+  <Library {updateReady} onapply={() => void importRunning().then((busy) => { if (!busy) applyUpdate(); })} onsettings={() => (screen = { name: 'settings' })} onopen={(id) => (screen = { name: 'reader', id, path: null })} />
 {/if}
 
 <div class="top-inset" data-testid="top-inset" class:reader={screen.name === 'reader'}></div>

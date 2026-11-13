@@ -16,6 +16,11 @@ test.each([false, true])('토큰 값과 대비 (dark=%s)', (dark) => {
     expect(ratio(rgba(tok(fg, dark)), rgba(tok(bg, dark))), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
   for (const k of ['warn', 'info']) expect(ratio(rgba(tok(`${k}-fg`, dark)), over(rgba(tok(`${k}-bg`, dark)), surface)), k).toBeGreaterThanOrEqual(4.5);
 });
+test.each([false, true])('위험(--danger)·액센트 버튼 글자 대비 (dark=%s)', (dark) => {
+  expect(ratio(rgba(tok('danger', dark)), rgba(tok('surface', dark))), 'danger on surface').toBeGreaterThanOrEqual(4.5);
+  expect(ratio(rgba(tok('surface', dark)), rgba(tok('accent', dark))), 'surface on accent').toBeGreaterThanOrEqual(4.5);
+  expect(tok('danger', dark)).toBe(dark ? '#FF7A6B' : '#C0392B');
+});
 test('스펙 표의 값 그대로', () => {
   expect([tok('bg-app', false), tok('bg-reader', false), tok('accent', false), tok('bar', false)]).toEqual(['#EEF0F4', '#FFFFFF', '#2F6FEB', 'rgba(250,251,253,0.86)']);
   expect([tok('bg-app', true), tok('bg-reader', true), tok('accent', true), tok('surface', true)]).toEqual(['#101216', '#000000', '#6EA0FF', '#1A1D23']);
