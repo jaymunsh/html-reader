@@ -2,6 +2,7 @@ import { installGuards } from './guards';
 import { installLinkHandling } from './links';
 import { applyRestore, whenStable } from './restore';
 import { findScroller, metrics, watchScroller } from './scroller';
+import { installTap } from './tap';
 import { parseShellMessage, wrap, type AgentMsg } from '../lib/protocol';
 
 const script = document.currentScript as HTMLScriptElement | null;
@@ -30,6 +31,7 @@ const send = (msg: AgentMsg) => parent.postMessage(wrap(msg), location.origin);
 
 function start(): void {
   installLinkHandling(send);
+  installTap(send);
   let el = findScroller();
   let queued = false;
   const target = () => (el === document.scrollingElement ? window : el);

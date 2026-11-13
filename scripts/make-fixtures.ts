@@ -106,6 +106,10 @@ export function makeFixtures(outDir: string, opts: { big?: boolean } = {}): void
     '04-root-hidden.zip': z([
       f('index.html', long({ title: '루트 잠김', head: '<style>html,body{overflow:hidden}</style>', h1: 'locked' })),
     ]),
+    // html clips, body is the scroller (its overflow does not propagate because html is non-visible).
+    '04-body-scroll.zip': z([
+      f('index.html', long({ title: '본문 스크롤', head: '<style>html{height:100%;overflow:hidden}body{height:100%;margin:0;overflow:auto}</style>', h1: 'body' })),
+    ]),
     // 100vh body + default 8px margin overflows the root by 16px; the real scroller is the inner <main>.
     '04-margin-inner.zip': z([
       f('index.html', `<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><title>여백 내부 스크롤</title>` +

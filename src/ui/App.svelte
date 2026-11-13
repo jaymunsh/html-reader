@@ -5,7 +5,6 @@
   import { setScreen } from './chrome';
   import Settings from './settings/Settings.svelte';
   import { applyUpdate, hasWaitingUpdate, watchForUpdate } from './sw-client';
-  import Reader from './reader/Reader.svelte';
 
   type Screen = { name: 'library' } | { name: 'settings' } | { name: 'reader'; id: string; path: string | null };
 
@@ -44,7 +43,9 @@
 
 {#if screen.name === 'reader'}
   {#key screen.id}
-    <Reader bookId={screen.id} openPath={screen.path} onopened={clean} onexit={toLibrary} />
+    {#await import('./reader/Reader.svelte') then { default: Reader }}
+      <Reader bookId={screen.id} openPath={screen.path} onopened={clean} onexit={toLibrary} />
+    {/await}
   {/key}
 {:else if screen.name === 'settings'}
   <Settings onback={() => (screen = { name: 'library' })} />

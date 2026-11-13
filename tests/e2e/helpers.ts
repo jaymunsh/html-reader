@@ -112,7 +112,28 @@ export function bookFrame(page: Page): Frame {
   return f;
 }
 
+/** Open the reader overlay (mobile layout). No-op when already open or on the desktop layout (top bar always shown). */
+export async function openOverlay(page: Page): Promise<void> {
+  const reader = page.getByTestId('reader');
+  if ((await reader.getAttribute('data-overlay')) === 'open') return;
+  if (await page.evaluate(() => matchMedia('(min-width: 768px)').matches)) return;
+  const tab = page.getByTestId('ribbon-tab');
+  if (await tab.count()) await tab.tap();
+  else {
+    const vp = page.viewportSize()!;
+    await page.touchscreen.tap(vp.width / 2, vp.height / 2);
+  }
+  await expect(reader).toHaveAttribute('data-overlay', 'open');
+  await overlaySettled(page);
+}
+
+/** Wait for the overlay's transitions to finish (Playwright counts an opacity-0 transformed bar as visible). */
+export async function overlaySettled(page: Page): Promise<void> {
+  await page.getByTestId('overlay-top').evaluate((e) => Promise.all(e.getAnimations({ subtree: true }).map((a) => a.finished)).then(() => undefined));
+}
+
 export async function backToLibrary(page: Page): Promise<void> {
+  await openOverlay(page);
   await page.getByTestId('reader-back').click();
   await expect(page.getByTestId('library')).toBeVisible();
 }

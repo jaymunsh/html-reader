@@ -4,6 +4,8 @@
   import { ProgressTracker } from '../../lib/progress';
   import type { Restore } from '../../lib/protocol';
   import { ensureController, tellSw } from '../sw-client';
+  import Overlay from './Overlay.svelte';
+  import { layout } from '../layout.svelte';
   import { createSession, type AgentState } from './session';
 
   let { bookId, openPath, onexit, onopened }: {
@@ -14,6 +16,26 @@
   let agent = $state<AgentState>('pending');
   let path = $state('');
   let iframe = $state<HTMLIFrameElement>();
+  let title = $state('');
+  let overlayOpen = $state(false);
+
+  export const OVERLAY_HIDE_MS = 3000;
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  const holds = new Set<symbol>();
+  function arm() {
+    clearTimeout(hideTimer);
+    if (overlayOpen && !holds.size) hideTimer = setTimeout(() => { overlayOpen = false; }, OVERLAY_HIDE_MS);
+  }
+  /** Keep the overlay up while dragging / using a panel; call the returned function to release. */
+  export function holdOverlay(reason: string): () => void {
+    const k = Symbol(reason);
+    holds.add(k);
+    clearTimeout(hideTimer);
+    return () => { holds.delete(k); arm(); };
+  }
+  /** Any interaction with the overlay restarts the idle timer. */
+  export const pokeOverlay = arm;
+  const onTap = () => { if (layout.desktop) return; overlayOpen = !overlayOpen; arm(); };
 
   let tracker: ProgressTracker | null = null;
   let book: Book | undefined;
@@ -34,6 +56,7 @@
       document.removeEventListener('visibilitychange', onVisibility);
       flush();
       session?.destroy();
+      clearTimeout(hideTimer);
     };
   });
 
@@ -59,13 +82,14 @@
     firstPath = start;
     session = createSession(iframe, bookId, {
       onState: (s) => { agent = s; },
-      onPage: (p) => {
+      onPage: (p, t) => {
         path = p;
+        title = t ?? book?.title ?? '';
         firstPath = null;
         void updateBook(bookId, { lastPath: p, lastOpenedAt: Date.now() }).catch(() => {});
       },
       onScroll: (pct, ratio) => { tracker?.update(path, pct, ratio); },
-      onTap: () => {},
+      onTap,
       onKey: () => {},
       onExternal: (url) => { window.open(url, '_blank', 'noopener'); },
       getInit: (p) => {
@@ -101,15 +125,14 @@
   </div>
 {/if}
 
-<div class="reader" data-testid="reader" data-book-id={bookId} data-path={path} data-agent={agent} data-overlay="closed"
+<div class="reader" data-testid="reader" data-book-id={bookId} data-path={path} data-agent={agent} data-overlay={layout.desktop || overlayOpen ? 'open' : 'closed'}
   hidden={notice !== 'none'}>
   <iframe bind:this={iframe} data-testid="reader-frame" title="문서"></iframe>
-  <button type="button" class="back" data-testid="reader-back" onclick={back}>서재</button>
+  <div role="presentation" onpointerdown={pokeOverlay}><Overlay open={overlayOpen} {title} onback={back} /></div>
 </div>
 
 <style>
   .reader { position: fixed; inset: 0; background: var(--bg-reader); }
   .reader[hidden] { display: none; }
   iframe { position: fixed; top: var(--sat); left: 0; right: 0; bottom: 0; width: 100%; height: calc(100% - var(--sat)); border: 0; display: block; }
-  .back { position: fixed; left: max(8px, env(safe-area-inset-left)); top: max(8px, env(safe-area-inset-top)); z-index: 10; }
 </style>

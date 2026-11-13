@@ -107,3 +107,13 @@ test('문서 안 링크 이동과 뒤로 가기를 셸이 따라간다', async (
   await f.evaluate(() => history.back());
   await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'index.html');   // 셸이 뒤로 가기도 따라간다
 });
+
+test('html은 잘리고 body가 스크롤러인 문서: body 스크롤을 따라간다', async ({ page }) => {
+  await page.goto('/');
+  const id = await importFixture(page, '04-body-scroll.zip');
+  const f = await openBook(page, id);
+  await expect.poll(async () => (await prog(page, id, 'index.html'))?.maxPct, { timeout: 5000 }).toBeLessThan(50);
+  expect((await prog(page, id, 'index.html')).read).toBe(false);
+  await f.evaluate(() => { document.body.scrollTop = (document.body.scrollHeight - document.body.clientHeight) * 0.5; });
+  await expect.poll(async () => (await prog(page, id, 'index.html'))?.lastScrollRatio, { timeout: 5000 }).toBeCloseTo(0.5, 1);
+});

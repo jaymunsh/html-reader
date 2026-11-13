@@ -2,8 +2,10 @@
 
 const root = () => document.scrollingElement ?? document.documentElement;
 const range = (el: Element) => el.scrollHeight - el.clientHeight;
-// The root scrolls only if neither html nor body clips it (spec §6.4).
-const rootLocked = () => [document.documentElement, document.body].some((e) => e && /hidden|clip/.test(getComputedStyle(e).overflowY));
+const oy = (e: Element) => getComputedStyle(e).overflowY;
+// Body's overflow reaches the viewport only when html's is visible; otherwise html alone decides (spec §6.4).
+const htmlOv = () => oy(document.documentElement);
+const rootLocked = () => /hidden|clip/.test(htmlOv() !== 'visible' || !document.body ? htmlOv() : oy(document.body));
 
 // Root, unless it cannot scroll or the inner scroller with the largest visible area has a larger scroll range.
 export function findScroller(): Element {
@@ -11,10 +13,12 @@ export function findScroller(): Element {
   const rootRange = rootLocked() ? 0 : range(r);
   let best: Element | null = null;
   let bestArea = 0;
-  for (const el of document.body?.querySelectorAll('*') ?? []) {
+  // body is its own scroller only when html is non-visible (else its overflow propagated to the viewport).
+  const cands = [...(document.body && htmlOv() !== 'visible' ? [document.body] : []), ...(document.body?.querySelectorAll('*') ?? [])];
+  for (const el of cands) {
     if (range(el) <= 0) continue;
-    const oy = getComputedStyle(el).overflowY;
-    if (oy !== 'auto' && oy !== 'scroll') continue;
+    const o = oy(el);
+    if (o !== 'auto' && o !== 'scroll') continue;
     const b = el.getBoundingClientRect();
     const w = Math.min(b.right, innerWidth) - Math.max(b.left, 0);
     const h = Math.min(b.bottom, innerHeight) - Math.max(b.top, 0);
