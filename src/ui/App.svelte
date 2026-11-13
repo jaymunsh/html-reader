@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { cleanupOrphans } from '../lib/storage';
   import Library from './library/Library.svelte';
   import Reader from './reader/Reader.svelte';
 
@@ -13,6 +15,12 @@
   let screen = $state<Screen>(initial());
 
   $effect(() => { document.documentElement.dataset.screen = screen.name; });
+
+  // Orphan cleanup once the first screen is up (skips itself while an import holds the lock).
+  onMount(() => {
+    const run = () => { void cleanupOrphans().catch(() => {}).finally(() => { document.documentElement.dataset.cleanup = 'done'; }); };
+    if ('requestIdleCallback' in window) requestIdleCallback(run); else setTimeout(run, 1500);
+  });
 
   // Drop ?open= from the address once the reader has taken over (after any SW-install reload).
   function clean() {
