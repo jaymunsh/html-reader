@@ -23,7 +23,15 @@ const askEntry = (pagePaths: string[]) => new Promise<string | null>((res) => {
 
 async function loadItems(file: File): Promise<Item[]> {
   if (/\.html?$/i.test(file.name)) {
-    return [{ path: file.name.normalize('NFC'), size: file.size, read: async (onBytes) => { onBytes(file.size); return file.slice(); } }];
+    // Same path as a one-entry bundle: plan + precheck (size/quota) before reading anything.
+    const { files } = planEntries([{
+      name: file.name, method: 0, flags: 0, encrypted: false, isDirectory: false, crc32: 0,
+      compressedSize: file.size, uncompressedSize: file.size, localHeaderOffset: 0,
+    }]);
+    if (!files.length) throw new ImportError('unsupported-file');
+    precheck(files, (await navigator.storage?.estimate?.()) ?? null);
+    const path = files[0].path;
+    return [{ path, size: file.size, read: async (onBytes) => { onBytes(file.size); return file.slice(); } }];
   }
   const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
   const sig = head.length === 4 && head[0] === 0x50 && head[1] === 0x4b
@@ -92,6 +100,7 @@ async function run(file: File, mode: ImportMode): Promise<string> {
         id: bookId, title, sourceName, cacheName, entryPath, pagePaths, fileCount: items.length, totalBytes: total,
         importedAt: now, lastOpenedAt: 0, lastPath: entryPath, textScale: 1,
       };
+      if ((await cache.keys()).length !== items.length) throw new ImportError('failed', 'cache write verification failed');
       await commitNewBook(book, { bookId, paths: items.map((i) => i.path), titles }, texts);
       return bookId;
     } catch (e) {
