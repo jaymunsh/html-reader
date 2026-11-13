@@ -46,4 +46,7 @@ test('목록에 없는 페이지에서는 – / N쪽', async ({ page }) => {
   await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'frag.html');
   await openOverlay(page);
   await expect(page.getByTestId('page-info')).toHaveText(/^– \/ 1쪽/);
+  await expect(page.getByTestId('btn-prev')).toBeDisabled();
+  await page.getByTestId('btn-next').tap();
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'index.html');
 });
