@@ -10,6 +10,19 @@
   --shadow-card: 0 1px 2px rgba(21,24,30,.06), 0 6px 18px rgba(21,24,30,.05);
   --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px);
   --font: 'Pretendard Variable', system-ui, sans-serif;
+  /* Stacking order, low to high. */
+  --z-local: 1;          /* raise inside a component's own stacking context (panel resizer) */
+  --z-inset: 5;          /* top safe-area inset strip */
+  --z-popover: 5;        /* book card row menu */
+  --z-ribbon: 8;         /* reader ribbon tab */
+  --z-line: 9;           /* reader progress line, scroll handle track */
+  --z-bar: 10;           /* overlay bars, library bottom bar */
+  --z-toast: 11;         /* hint toast */
+  --z-panel-scrim: 29;   /* mobile panel scrim */
+  --z-panel: 30;         /* files/bookmarks panel (sheet or dock) */
+  --z-sheet-scrim: 39;   /* Sheet scrim */
+  --z-sheet: 40;         /* Sheet (issues; P3 mobile search) */
+  --z-dialog: 50;        /* Dialog: above panel and sheets, so one opened from them is on top */
   color-scheme: light;
 }
 :root[data-theme="dark"] {

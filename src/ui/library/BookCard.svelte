@@ -68,7 +68,7 @@
       {#if online}<span class="chip info" data-testid="online-badge" aria-label="온라인 필요"><Icon name="cloud" size={14} /></span>{/if}
     </span>
   </span>
-  <button bind:this={menuBtn} type="button" class="menu-btn" data-testid="book-menu" aria-label="메뉴" aria-haspopup="menu" aria-expanded={menu}
+  <button bind:this={menuBtn} type="button" class="icon-btn menu-btn" data-testid="book-menu" aria-label="메뉴" aria-haspopup="menu" aria-expanded={menu}
     onclick={(e) => { e.stopPropagation(); menu = !menu; }}><Icon name="more" /></button>
   {#if menu}
     <div class="menu" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
@@ -97,14 +97,11 @@
   .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--r-chip); font-size: 12px; font-weight: 600; }
   .chip.warn { background: var(--warn-bg); color: var(--warn-fg); }
   .chip.info { background: var(--info-bg); color: var(--info-fg); }
-  .menu-btn {
-    flex: none; align-self: flex-start; width: 44px; height: 44px; display: grid; place-items: center; padding: 0;
-    border: 0; border-radius: var(--r-control); background: none; color: var(--text-3); cursor: pointer;
-  }
+  .menu-btn { flex: none; align-self: flex-start; border-radius: var(--r-control); color: var(--text-3); cursor: pointer; }
   .menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   @media (hover: hover) { .menu-btn:hover { background: var(--bg-app); color: var(--text); } }
   .menu {
-    position: absolute; right: 8px; top: 54px; z-index: 5; min-width: 160px; padding: 6px; box-sizing: border-box;
+    position: absolute; right: 8px; top: 54px; z-index: var(--z-popover); min-width: 160px; padding: 6px; box-sizing: border-box;
     background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-control); box-shadow: var(--shadow-card);
     transform-origin: top right; animation: pop .14s ease-out both;
   }

@@ -11,7 +11,7 @@
 </script>
 
 <header class="bar top" class:desk={layout.desktop} class:closed={!shown} data-testid="overlay-top" inert={!shown}>
-  <button type="button" class="back" data-testid="reader-back" aria-label="서재로" onclick={onback}><Icon name="back" /></button>
+  <button type="button" class="icon-btn back" data-testid="reader-back" aria-label="서재로" onclick={onback}><Icon name="back" /></button>
   <span class="title" data-testid="overlay-title">{title}</span>
   <span class="page-info" data-testid="page-info">{pageInfo}</span>
   <span class="actions">{@render topActions?.()}</span>
@@ -24,7 +24,7 @@
 
 <style>
   .bar {
-    position: fixed; left: 0; right: 0; z-index: 10;
+    position: fixed; left: 0; right: 0; z-index: var(--z-bar);
     background: var(--bar); -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
     transition: transform .2s ease, opacity .2s ease; color: var(--text);
   }
@@ -41,7 +41,7 @@
     border-top: 1px solid var(--hairline); box-sizing: content-box;
   }
   .bottom.closed { transform: translateY(100%); }
-  .back { flex: none; background: none; border: 0; color: inherit; width: 44px; height: 44px; display: grid; place-items: center; }
+  .back { flex: none; }
   .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   /* Too narrow: the title gives way first (basis 0), then the page info; the controls never shrink. */
   .page-info { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--text-3); white-space: nowrap; }

@@ -69,8 +69,7 @@
   $effect(() => { if (overlayOpen) untrack(refreshIssues); });
   function openIssues() { issuesOpen = true; issuesHold ??= holdOverlay('issues'); }
   function closeIssues() {
-    issuesOpen = false; issuesHold?.(); issuesHold = null;
-    void tick().then(() => btnIssues?.focus());
+    issuesOpen = false; issuesHold?.(); issuesHold = null;   // Sheet returns focus to the badge
   }
   const sheet = $derived((!layout.desktop && sheetOpen) || issuesOpen);
   let sheetHold: (() => void) | null = null;
@@ -290,27 +289,27 @@
   <div role="presentation" bind:this={overlayEl} onpointerdown={pokeOverlay} onfocusin={onOverlayFocusIn} onfocusout={onOverlayFocusOut} inert={sheet}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back}>
     {#snippet topActions()}
       {#if nMissing}
-        <button type="button" class="act badge warn" data-testid="issue-badge" aria-label={`누락 ${nMissing}`} bind:this={btnIssues} onclick={openIssues}><Icon name="warning" size={16} /><span class="full">누락{' '}</span>{nMissing}</button>
+        <button type="button" class="icon-btn badge warn" data-testid="issue-badge" aria-label={`누락 ${nMissing}`} bind:this={btnIssues} onclick={openIssues}><Icon name="warning" size={16} /><span class="full">누락{' '}</span>{nMissing}</button>
       {/if}
       {#if agent === 'limited'}<span class="badge info" data-testid="limited-badge" role="img" aria-label="제한 모드"><span class="ico"><Icon name="warning" size={16} /></span><span class="full">제한 모드</span></span>{/if}
       {#if !layout.desktop}
-        <button type="button" class="act" data-testid="btn-panel" aria-label="파일·북마크" aria-expanded={sheetOpen} bind:this={btnPanel} onclick={openSheet}><Icon name="menu" /></button>
+        <button type="button" class="icon-btn" data-testid="btn-panel" aria-label="파일·북마크" aria-expanded={sheetOpen} bind:this={btnPanel} onclick={openSheet}><Icon name="menu" /></button>
       {:else}
         {@render pn()}
         {#if panelReady && !dockOpen}
-          <button type="button" class="act" data-testid="panel-toggle" aria-label="패널 펼치기" aria-expanded="false" onclick={openDock}><Icon name="panel" /></button>
+          <button type="button" class="icon-btn" data-testid="panel-toggle" aria-label="패널 펼치기" aria-expanded="false" onclick={openDock}><Icon name="panel" /></button>
         {/if}
       {/if}
     {/snippet}
     {#snippet bottom()}
       <div class="nav">
-        <button type="button" data-testid="btn-top" aria-label="맨 위" disabled={agent === 'limited'} onclick={actions.top}><Icon name="to-top" /></button>
+        <button type="button" class="icon-btn" data-testid="btn-top" aria-label="맨 위" disabled={agent === 'limited'} onclick={actions.top}><Icon name="to-top" /></button>
         {@render pn()}
-        <button type="button" data-testid="btn-bottom" aria-label="맨 아래" disabled={agent === 'limited'} onclick={actions.bottom}><Icon name="to-bottom" /></button>
+        <button type="button" class="icon-btn" data-testid="btn-bottom" aria-label="맨 아래" disabled={agent === 'limited'} onclick={actions.bottom}><Icon name="to-bottom" /></button>
       </div>
     {/snippet}
   </Overlay></div>
-  <IssuesSheet open={issuesOpen} issues={missing} onClose={closeIssues} />
+  <IssuesSheet open={issuesOpen} issues={missing} onClose={closeIssues} invoker={btnIssues} />
   {#if panelReady}
     <Panel open={panelOpen} bind:tab={panelTab} onClose={closePanel} bind:width={panelWidth} max={panelMax}
       onWidthCommit={(w) => void setSetting('panelWidth', w).catch(() => {})} onEscape={() => iframe?.focus()} blocked={issuesOpen}>
@@ -331,21 +330,18 @@
 </div>
 
 {#snippet pn()}
-  <button type="button" class="act" data-testid="btn-prev" aria-label="이전 쪽" disabled={!prevPath} onclick={() => go(-1)}><Icon name="prev" /></button>
-  <button type="button" class="act zb" data-testid="zoom-out" aria-label="글자 작게" disabled={zoomOutOff} onclick={() => zoomBy(-1)}>가-</button>
+  <button type="button" class="icon-btn" data-testid="btn-prev" aria-label="이전 쪽" disabled={!prevPath} onclick={() => go(-1)}><Icon name="prev" /></button>
+  <button type="button" class="icon-btn zb" data-testid="zoom-out" aria-label="글자 작게" disabled={zoomOutOff} onclick={() => zoomBy(-1)}>가-</button>
   <span class="zv" data-testid="zoom-value">{zoomLabel(scale)}</span>
-  <button type="button" class="act zb" data-testid="zoom-in" aria-label="글자 크게" disabled={zoomInOff} onclick={() => zoomBy(1)}>가+</button>
-  <button type="button" class="act" data-testid="btn-next" aria-label="다음 쪽" disabled={!nextPath} onclick={() => go(1)}><Icon name="next" /></button>
+  <button type="button" class="icon-btn zb" data-testid="zoom-in" aria-label="글자 크게" disabled={zoomInOff} onclick={() => zoomBy(1)}>가+</button>
+  <button type="button" class="icon-btn" data-testid="btn-next" aria-label="다음 쪽" disabled={!nextPath} onclick={() => go(1)}><Icon name="next" /></button>
 {/snippet}
 
 <style>
   .reader { position: fixed; inset: 0; background: var(--bg-reader); }
   .reader[hidden] { display: none; }
   .nav { display: flex; justify-content: space-around; align-items: center; min-height: 56px; }
-  .act:disabled, .nav button:disabled { opacity: .35; }
-  .nav button { background: none; border: 0; color: var(--text); width: 44px; height: 44px; display: grid; place-items: center; }
-  .act { background: none; border: 0; color: var(--text); width: 44px; height: 44px; display: grid; place-items: center; }
-  .act.badge { width: auto; min-width: 44px; padding: 0 8px; gap: 4px; display: inline-flex; align-items: center; justify-content: center; flex: none; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .badge.icon-btn { width: auto; min-width: 44px; padding: 0 8px; gap: 4px; display: inline-flex; align-items: center; justify-content: center; flex: none; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .badge.warn { color: var(--warn-fg); background: var(--warn-bg); border-radius: var(--r-chip); }
   span.badge { flex: none; padding: 4px 8px; font-size: 12px; white-space: nowrap; border-radius: var(--r-chip); background: var(--info-bg); color: var(--info-fg); }
   span.badge { min-height: 44px; display: inline-flex; align-items: center; box-sizing: border-box; }

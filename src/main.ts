@@ -1,4 +1,5 @@
 import './ui/theme/tokens.css';
+import './ui/theme/base.css';
 import { applyTheme, bootTheme, initTheme, resolveTheme, setChromeColor } from './ui/chrome';
 import { mount } from 'svelte';
 import App from './ui/App.svelte';

@@ -61,6 +61,6 @@
 <div class="top-inset" data-testid="top-inset" class:reader={screen.name === 'reader'}></div>
 
 <style>
-  .top-inset { position: fixed; top: 0; left: 0; right: 0; height: var(--sat); background: var(--bg-app); z-index: 5; }
+  .top-inset { position: fixed; top: 0; left: 0; right: 0; height: var(--sat); background: var(--bg-app); z-index: var(--z-inset); }
   .top-inset.reader { background: var(--bg-reader); }
 </style>

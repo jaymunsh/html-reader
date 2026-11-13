@@ -61,7 +61,7 @@
 
 <style>
   /* between the top bar (52px + hairline) and the bottom bar (56px + hairline) */
-  .track { position: fixed; right: 0; z-index: 9; top: calc(var(--sat) + 53px); bottom: calc(var(--sab) + 57px); width: 44px; pointer-events: none; }
+  .track { position: fixed; right: 0; z-index: var(--z-line); top: calc(var(--sat) + 53px); bottom: calc(var(--sab) + 57px); width: 44px; pointer-events: none; }
   .mover { position: absolute; right: 0; top: 0; width: 30px; height: 64px; will-change: transform; }
   .handle {
     position: relative; width: 30px; height: 64px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: space-around;

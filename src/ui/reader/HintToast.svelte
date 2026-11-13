@@ -9,7 +9,7 @@
 
 <style>
   .toast {
-    position: fixed; left: 12px; right: 12px; bottom: calc(var(--sab) + 16px); z-index: 11;
+    position: fixed; left: 12px; right: 12px; bottom: calc(var(--sab) + 16px); z-index: var(--z-toast);
     display: flex; align-items: center; gap: 12px; padding: 12px 8px 12px 16px;
     background: var(--surface); color: var(--text); border: 1px solid var(--hairline); border-radius: 14px;
     font-size: 14px; line-height: 1.45;

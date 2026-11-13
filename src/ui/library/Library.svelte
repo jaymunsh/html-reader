@@ -139,7 +139,7 @@
     {/if}
     <header class="title">
       <h1>서재</h1>
-      <button type="button" class="icon" data-testid="settings-button" aria-label="설정" onclick={onsettings}><Icon name="settings" /></button>
+      <button type="button" class="icon-btn settings" data-testid="settings-button" aria-label="설정" onclick={onsettings}><Icon name="settings" /></button>
     </header>
     {#if books.length}
       <div class="list">
@@ -215,10 +215,7 @@
   .title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 16px; }
   .title h1 { margin: 0; font-size: 34px; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; }
   .desk .title { margin: 16px 0 24px; }
-  .icon {
-    width: 44px; height: 44px; flex: none; display: grid; place-items: center; padding: 0; border: 0; cursor: pointer;
-    border-radius: var(--r-control); background: var(--surface); color: var(--text); box-shadow: var(--shadow-card);
-  }
+  .settings { flex: none; cursor: pointer; border-radius: var(--r-control); background: var(--surface); box-shadow: var(--shadow-card); }
   .list { display: flex; flex-direction: column; gap: 10px; }
   .desk .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
   .empty { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 72px 24px; text-align: center; }
@@ -234,7 +231,7 @@
   }
   .update button:disabled { opacity: .5; cursor: default; }
   .bar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding-bottom: var(--sab);
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-bar); padding-bottom: var(--sab);
     background: var(--bar); -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
     border-top: 1px solid var(--hairline);
   }
@@ -253,5 +250,5 @@
     font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform .15s ease;
   }
   .import:active { transform: scale(.97); }
-  .import:focus-visible, .icon:focus-visible, .update button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .import:focus-visible, .update button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>

@@ -62,7 +62,7 @@
       <button type="button" role="tab" data-testid="panel-tab-bookmarks" aria-selected={tab === 'bookmarks'} onclick={() => (tab = 'bookmarks')}>북마크</button>
     </div>
     {#if layout.desktop && open}
-      <button type="button" class="icon" data-testid="panel-toggle" aria-label="패널 접기" aria-expanded="true" onclick={onClose}><Icon name="panel" /></button>
+      <button type="button" class="icon-btn" data-testid="panel-toggle" aria-label="패널 접기" aria-expanded="true" onclick={onClose}><Icon name="panel" /></button>
     {/if}
   </div>
   <div class="body" role="tabpanel">
@@ -74,10 +74,10 @@
 </aside>
 
 <style>
-  .scrim { position: fixed; inset: 0; z-index: 29; background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+  .scrim { position: fixed; inset: 0; z-index: var(--z-panel-scrim); background: var(--scrim); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
   .scrim.open { opacity: 1; pointer-events: auto; }
   .panel {
-    position: fixed; z-index: 30; display: flex; flex-direction: column; box-sizing: border-box;
+    position: fixed; z-index: var(--z-panel); display: flex; flex-direction: column; box-sizing: border-box;
     background: var(--surface); color: var(--text);
   }
   .panel:not(.dock) {
@@ -88,12 +88,11 @@
   .dock { top: 0; right: 0; bottom: 0; padding-top: var(--sat); border-left: 1px solid var(--hairline); }
   .dock:not(.open) { visibility: hidden; }
   .grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--hairline); margin: 8px auto 0; flex: none; }
-  .resizer { position: absolute; left: -4px; top: 0; bottom: 0; width: 10px; cursor: col-resize; touch-action: none; z-index: 1; }
+  .resizer { position: absolute; left: -4px; top: 0; bottom: 0; width: 10px; cursor: col-resize; touch-action: none; z-index: var(--z-local); }
   .head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex: none; }
   .seg { flex: 1; display: flex; padding: 2px; border-radius: var(--r-control); background: var(--bg-app); }
   .seg button { flex: 1; min-height: 44px; border: 0; border-radius: var(--r-control); background: none; color: var(--text-2); font: inherit; }
   .seg button[aria-selected='true'] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: var(--shadow-card); }
-  .icon { background: none; border: 0; color: var(--text); width: 44px; height: 44px; display: grid; place-items: center; }
   .body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .help { flex: none; margin: 0; padding: 10px 12px; border-top: 1px solid var(--hairline); font-size: 12px; color: var(--text-3); }
 </style>

@@ -49,7 +49,7 @@
 
 <style>
   .layer {
-    position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; justify-content: center;
+    position: fixed; inset: 0; z-index: var(--z-dialog); display: flex; align-items: flex-end; justify-content: center;
     background: var(--scrim); animation: fade .2s ease both;
   }
   .layer.desk { align-items: center; padding: 24px; }

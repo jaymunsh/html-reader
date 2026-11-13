@@ -29,7 +29,7 @@
 
 <main data-testid="settings">
   <header>
-    <button type="button" class="icon" data-testid="settings-back" aria-label="뒤로" onclick={onback}><Icon name="back" /></button>
+    <button type="button" class="icon-btn back" data-testid="settings-back" aria-label="뒤로" onclick={onback}><Icon name="back" /></button>
     <h1>설정</h1>
   </header>
 
@@ -61,7 +61,7 @@
   header { display: flex; align-items: center; gap: 4px; min-height: 52px; }
   h1 { font-size: 20px; font-weight: 700; margin: 0; }
   h2 { font-size: 13px; font-weight: 600; color: var(--text-3); margin: 0 0 8px 4px; }
-  .icon { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--text); border-radius: var(--r-control); margin-left: -10px; }
+  .back { border-radius: var(--r-control); margin-left: -10px; }
   section { margin-top: 20px; background: var(--surface); border-radius: var(--r-card); padding: 14px; box-shadow: var(--shadow-card); }
   .seg { display: flex; gap: 6px; padding: 4px; border-radius: var(--r-control); background: var(--bg-app); }
   .seg button { flex: 1; min-height: 44px; border: 0; border-radius: 9px; background: none; color: var(--text-2); font: inherit; font-weight: 600; }

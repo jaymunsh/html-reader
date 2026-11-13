@@ -57,19 +57,32 @@ export async function startImport(page: Page, name: string | string[]): Promise<
   }
 }
 
+/**
+ * Import a fixture and return the book id. With `dup: 'replace'`, the target is the most recently imported book with the
+ * same sourceName (the file's basename without extension); the helper waits until that book's `cacheName` changes.
+ */
 export async function importFixture(
   page: Page, name: string, opts: { entry?: string; dup?: 'replace' | 'add' } = {},
 ): Promise<string> {
-  const before = new Set((await idbAll(page, 'books')).map((b) => b.id));
+  const books = await idbAll(page, 'books');
+  const before = new Set(books.map((b) => b.id));
+  let target: { id: string; cacheName: string } | undefined;
+  if (opts.dup === 'replace') {
+    const sourceName = path.basename(name).replace(/\.[^.]+$/, '').normalize('NFC');
+    target = books.filter((b) => b.sourceName === sourceName).sort((a, b) => b.importedAt - a.importedAt)[0];
+    if (!target) throw new Error(`importFixture: no book with sourceName "${sourceName}" to replace`);
+  }
   await startImport(page, name);
   if (opts.dup) await page.getByTestId(opts.dup === 'replace' ? 'dup-replace' : 'dup-add').click();
   if (opts.entry) await page.locator(`[data-testid=entry-choice][data-path="${opts.entry}"]`).click();
-  if (opts.dup === 'replace') {
+  if (target) {
+    const { id, cacheName } = target;
+    await expect.poll(async () => {
+      const now = (await idbGet(page, 'books', id))?.cacheName;
+      return !!now && now !== cacheName;                                   // the replace committed under a new cache
+    }, { timeout: 30_000 }).toBe(true);
     await expect(page.getByTestId('import-progress')).toHaveCount(0);
-    const sourceName = name.replace(/\.[^.]+$/, '').normalize('NFC');
-    const books = (await idbAll(page, 'books')).filter((b) => b.sourceName === sourceName);
-    books.sort((a, b) => b.importedAt - a.importedAt);
-    return books[0].id;
+    return id;
   }
   let id = '';
   await expect.poll(async () => {

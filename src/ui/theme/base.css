@@ -1,0 +1,4 @@
+/* Shared 44x44 icon button. Components override only what differs (colour, background, flex, offset). */
+.icon-btn { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; }
+.icon-btn:disabled { opacity: .35; }
+.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
