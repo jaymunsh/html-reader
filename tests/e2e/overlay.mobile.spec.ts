@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { importFixture, openBook, overlaySettled } from './helpers';
 
+const bar = (page: any, id: string) => page.getByTestId(id).evaluate((e: Element) => ({ opacity: getComputedStyle(e).opacity, inert: e.hasAttribute('inert') }));
 const state = (page: any) => page.getByTestId('reader').getAttribute('data-overlay');
 async function open9(page: any) { await page.goto('/'); const id = await importFixture(page, '09-click-handlers.zip'); return openBook(page, id); }
 
@@ -9,10 +10,12 @@ test('빈 곳을 탭하면 열리고 다시 탭하면 닫힌다', async ({ page 
   expect(await state(page)).toBe('closed');
   await f.locator('#plain').tap();
   await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'open');
-  await expect(page.getByTestId('overlay-top')).toBeVisible();
-  await expect(page.getByTestId('overlay-bottom')).toBeVisible();
+  await overlaySettled(page);
+  for (const id of ['overlay-top', 'overlay-bottom']) expect(await bar(page, id)).toEqual({ opacity: '1', inert: false });
   await f.locator('#plain').tap();
   await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'closed');
+  await overlaySettled(page);
+  for (const id of ['overlay-top', 'overlay-bottom']) expect(await bar(page, id)).toEqual({ opacity: '0', inert: true });
 });
 
 for (const sel of ['#onclick', '[role=tab] >> nth=1', '#pointer', '#prevent', '#link', '#inp'])
@@ -65,7 +68,7 @@ test('오버레이는 문서 공간을 밀지 않고 화면 끝에 붙는다', a
   const top = (await page.getByTestId('overlay-top').boundingBox())!, bottom = (await page.getByTestId('overlay-bottom').boundingBox())!;
   expect([top.x, top.y, top.width]).toEqual([0, 0, vp.width]);
   expect([bottom.x, Math.round(bottom.y + bottom.height), bottom.width]).toEqual([0, vp.height, vp.width]);
-  const css = await page.getByTestId('overlay-top').evaluate((e) => { const s = getComputedStyle(e); return { bf: s.backdropFilter || (s as any).webkitBackdropFilter, tp: s.transitionProperty }; });
+  const css = await page.getByTestId('overlay-top').evaluate((e) => { const s = getComputedStyle(e); return { bf: s.backdropFilter, tp: s.transitionProperty }; });
   expect(css.bf).toContain('blur(22px)');
   expect(css.tp.split(',').map((s) => s.trim()).every((p) => ['transform', 'opacity'].includes(p))).toBe(true);
 });

@@ -115,7 +115,11 @@ export function bookFrame(page: Page): Frame {
 /** Open the reader overlay (mobile layout). No-op when already open or on the desktop layout (top bar always shown). */
 export async function openOverlay(page: Page): Promise<void> {
   const reader = page.getByTestId('reader');
-  if ((await reader.getAttribute('data-overlay')) === 'open') return;
+  if ((await reader.getAttribute('data-overlay')) === 'open') {
+    // restart the auto-hide timer so it cannot close under the caller's next click
+    await page.getByTestId('overlay-top').dispatchEvent('pointerdown');
+    return;
+  }
   if (await page.evaluate(() => matchMedia('(min-width: 768px)').matches)) return;
   const tab = page.getByTestId('ribbon-tab');
   if (await tab.count()) await tab.tap();

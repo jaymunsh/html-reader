@@ -31,7 +31,7 @@
 
   // Orphan cleanup once the first screen is up (skips itself while an import holds the lock).
   onMount(() => {
-    const run = () => { void cleanupOrphans().catch(() => {}).finally(() => { document.documentElement.dataset.cleanup = 'done'; }); };
+    const run = () => { void import('./reader/Reader.svelte').catch(() => {}); void cleanupOrphans().catch(() => {}).finally(() => { document.documentElement.dataset.cleanup = 'done'; }); };
     if ('requestIdleCallback' in window) requestIdleCallback(run); else setTimeout(run, 1500);
   });
 
@@ -45,6 +45,11 @@
   {#key screen.id}
     {#await import('./reader/Reader.svelte') then { default: Reader }}
       <Reader bookId={screen.id} openPath={screen.path} onopened={clean} onexit={toLibrary} />
+    {:catch}
+      <div role="alert" data-testid="reader-load-error">
+        <p>문서를 열 수 없습니다.</p>
+        <button type="button" onclick={toLibrary}>서재로</button>
+      </div>
     {/await}
   {/key}
 {:else if screen.name === 'settings'}
