@@ -16,8 +16,15 @@
   });
 
   const themes = [['system', '시스템'], ['light', '라이트'], ['dark', '다크']] as const;
-  function pick(t: 'system' | 'light' | 'dark') { theme = t; void setThemeSetting(t); }
-  function toggleLine() { void setSetting('progressLine', progressLine); }
+  function pick(t: 'system' | 'light' | 'dark') {
+    const prev = theme;
+    theme = t;
+    void setThemeSetting(t).then((ok) => { if (!ok && theme === t) theme = prev; });
+  }
+  function toggleLine() {
+    const v = progressLine;
+    void setSetting('progressLine', v).catch(() => { if (progressLine === v) progressLine = !v; });
+  }
 </script>
 
 <main data-testid="settings">

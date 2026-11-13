@@ -21,23 +21,39 @@ export function setChromeColor(screen: Screen): void {
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', hex(rgb));
 }
 
-let setting: 'system' | 'light' | 'dark' = 'system';
+type ThemeSetting = 'system' | 'light' | 'dark';
+const isSetting = (v: unknown): v is ThemeSetting => v === 'system' || v === 'light' || v === 'dark';
+let setting: ThemeSetting = 'system';
+let touched = false;
 let current: Screen = 'library';
 const mq = () => matchMedia('(prefers-color-scheme: dark)');
 const repaint = () => { applyTheme(resolveTheme(setting, mq().matches)); setChromeColor(current); };
+const mirror = (t: ThemeSetting) => { try { localStorage.setItem('theme', t); } catch { /* ignore */ } };
+
+/** Synchronous boot value (IndexedDB is async): the localStorage mirror of the theme setting. */
+export function bootTheme(): ThemeSetting {
+  let v: unknown = null;
+  try { v = localStorage.getItem('theme'); } catch { /* ignore */ }
+  return isSetting(v) ? v : 'system';
+}
 
 /** Remember the visible screen so a theme change repaints its color. */
 export function setScreen(screen: Screen): void { current = screen; setChromeColor(screen); }
 
-/** Apply the saved theme setting and follow the system while it is 'system'. */
+/** IndexedDB stays the source of truth: apply it (fixing any mirror drift) and follow the system while 'system'. */
 export async function initTheme(): Promise<void> {
-  setting = await getSetting('theme').catch(() => 'system' as const);
+  setting = bootTheme();
+  const saved = await getSetting('theme').catch(() => null);
+  if (!touched && isSetting(saved)) { setting = saved; mirror(saved); }
   repaint();
   mq().addEventListener('change', repaint);
 }
 
-export async function setThemeSetting(t: 'system' | 'light' | 'dark'): Promise<void> {
+/** Apply immediately; resolves to false when saving failed (the applied theme then lasts for this session only). */
+export async function setThemeSetting(t: ThemeSetting): Promise<boolean> {
+  touched = true;
   setting = t;
   repaint();
-  await setSetting('theme', t);
+  mirror(t);
+  try { await setSetting('theme', t); return true; } catch { return false; }
 }

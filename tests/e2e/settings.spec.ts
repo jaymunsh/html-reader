@@ -37,3 +37,21 @@ test('글꼴은 번들되어 오프라인에서도 로드된다', async ({ page,
   expect(await page.evaluate(async () => { await document.fonts.load('16px "Pretendard Variable"', '서재'); return document.fonts.check('16px "Pretendard Variable"', '서재'); })).toBe(true);
   await context.setOffline(false);
 });
+
+test('저장된 테마는 첫 프레임부터 적용된다 (깜빡임 없음)', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
+  await page.getByTestId('settings-button').click();
+  await page.getByTestId('theme-dark').click();
+  await expect.poll(() => idbGet(page, 'settings', 'theme')).toBe('dark');
+  await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      (window as any).__early = { theme: document.documentElement.dataset.theme, bg: document.documentElement.style.backgroundColor };
+    });
+  });
+  await page.reload();
+  const early = await page.evaluate(() => (window as any).__early);
+  expect(early.theme).toBe('dark');
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe('rgb(16, 18, 22)');
+  expect(await page.evaluate(() => document.querySelector('meta[name=theme-color]')!.getAttribute('content')!.toLowerCase())).toBe('#101216');
+});
