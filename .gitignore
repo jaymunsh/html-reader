@@ -4,3 +4,7 @@ dist/
 .leneu-session/
 .claude/worktrees/
 .superpowers/
+dist-v2/
+public/__reader/
+test-results/
+playwright-report/
