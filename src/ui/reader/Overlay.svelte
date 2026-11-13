@@ -42,7 +42,7 @@
   .bottom.closed { transform: translateY(100%); }
   .back { background: none; border: 0; color: inherit; width: 44px; height: 44px; display: grid; place-items: center; }
   .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-  .page-info { font-size: 12px; color: var(--text-dim, inherit); white-space: nowrap; }
+  .page-info { font-size: 12px; color: var(--text-3); white-space: nowrap; }
   .pbar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; pointer-events: none; }
   .pbar i { display: block; width: 100%; height: 100%; background: var(--accent); transform-origin: left; }
   .actions { display: flex; gap: 4px; }

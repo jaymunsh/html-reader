@@ -11,6 +11,12 @@ test('진행선이 스크롤을 따라가고 설정에서 끌 수 있다', async
   expect(Math.round((await line.boundingBox())!.y + 2)).toBe(page.viewportSize()!.height);
   await scrollFrameTo(f, 0.5);
   await expect.poll(async () => Number(await line.getAttribute('data-pct'))).toBeGreaterThan(40);
+  await openOverlay(page);
+  await expect(line).toHaveCSS('opacity', '0');
+  await page.getByTestId('overlay-top').dispatchEvent('pointerdown');
+  await page.touchscreen.tap(page.viewportSize()!.width / 2, page.viewportSize()!.height / 2);
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'closed');
+  await expect(line).toHaveCSS('opacity', '1');
   await backToLibrary(page);
   await page.getByTestId('settings-button').click();
   await page.getByTestId('setting-progress-line').uncheck();

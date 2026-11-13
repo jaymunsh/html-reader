@@ -23,8 +23,8 @@
   let curPct = $state(0);
   let bookPct = $state(0);
   let pages = $state<string[]>([]);
-  let showLine = $state(true);
-  const pageInfo = $derived(formatPageInfo(pages, path, bookPct));
+  let showLine = $state(false); // rendered only once the setting has loaded
+  const pageInfo = $derived(pages.length ? formatPageInfo(pages, path, bookPct) : '');
   const refreshBook = () => { if (book && tracker) bookPct = bookProgress(book.pagePaths, tracker.all()).pct; };
 
   export const OVERLAY_HIDE_MS = 3000;
