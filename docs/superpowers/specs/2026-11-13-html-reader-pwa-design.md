@@ -96,7 +96,8 @@ PC(macOS·Windows)와 모바일(iOS·Android)에서 **일반 브라우저와 동
 
 **IndexedDB `html-reader`**
 - `books`: `{ id, title, sourceName, entryPath, htmlPaths[], fileCount, totalBytes, importedAt, lastOpenedAt, lastPath, fontScale, hasExternalRefs, missing[] }`
-  - `sourceName`: 가져온 파일명(확장자 제외). 재가져오기 매칭에 쓴다.
+  - `title`: 화면에 보이는 문서명. 사용자가 수정할 수 있다(§7.7).
+  - `sourceName`: 가져온 파일명(확장자 제외). 재가져오기 매칭에만 쓰며 이름을 바꿔도 변하지 않는다.
   - `fontScale`: 문서별 글자 크기 배율(기본 1.0).
 - `progress`: 키 `[bookId, path]`, `{ maxPct (0–100), lastScrollRatio (0–1), read (boolean), updatedAt }`
   - 위치는 px가 아니라 **비율**로 저장한다. 글자 크기나 화면 폭이 바뀌어도 대략 같은 위치로 복귀하기 위해서다.
@@ -233,6 +234,14 @@ DOM 변경(`ResizeObserver` + 지연 재탐지)에 대응하며, 진행률·핸�
 - 서재 상단 검색창: 제목과 `sourceName`을 부분 일치로 필터링한다.
 - 정렬: 최근 읽음(기본), 가져온 날짜, 이름(자연 정렬), 진행률. 마지막 선택은 저장해 둔다.
 
+### 7.7 문서명 지정·수정
+- **기본 이름**: 시작 페이지의 `<title>`을 쓰고, 비어 있으면 `sourceName`을 쓴다.
+  보고서 HTML은 `<title>`이 "Document", "index"처럼 의미 없는 경우가 많으므로 이런 흔한 무의미 제목 목록에 걸리면 `sourceName`을 우선한다.
+- **중복 처리**: 이름이 기존 문서와 같으면 자동으로 ` (2)`, ` (3)` 접미사를 붙인다. 서재 카드에는 보조 정보로 `sourceName`과 가져온 날짜를 함께 표시해 구분을 돕는다.
+- **수정**: 서재 카드의 ⋯ 메뉴(또는 길게 누르기/우클릭) → "이름 바꾸기"에서 바꾼다. 같은 메뉴에 "삭제"도 둔다.
+  빈 이름은 허용하지 않고, 앞뒤 공백을 제거하며, 최대 100자까지 허용한다. 중복 이름은 수정할 때는 경고만 하고 허용한다.
+- 이름을 바꿔도 재가져오기 매칭(`sourceName`)에는 영향이 없다. 교체로 다시 가져올 때도 사용자가 지정한 이름을 유지한다.
+
 ## 8. 성능
 
 | 지점 | 방법 | 목표 |
@@ -264,7 +273,7 @@ DOM 변경(`ResizeObserver` + 지연 재탐지)에 대응하며, 진행률·핸�
 ### 단위 (Vitest)
 `path`(정규화, 탈출 차단, 디렉터리 index, 루트 절대경로 매핑), `mime`, 파일명 디코딩(UTF-8/CP949),
 진행률 계산, 시작 페이지 결정, `scanner`(누락·루트 밖 참조 감지), Range 헤더 파싱,
-`text-extract`(script/style 제거, 엔티티 디코딩, NFC), `search`(부분 일치, 스니펫), 재가져오기 시 진행률·북마크 이관 규칙, 서재 정렬.
+`text-extract`(script/style 제거, 엔티티 디코딩, NFC), `search`(부분 일치, 스니펫), 재가져오기 시 진행률·북마크 이관 규칙, 서재 정렬, 기본 문서명 결정·중복 접미사 부여.
 
 ### E2E (Playwright: Chromium, WebKit)
 테스트용 ZIP 세트를 저장소에 둔다.
@@ -286,6 +295,7 @@ DOM 변경(`ResizeObserver` + 지연 재탐지)에 대응하며, 진행률·핸�
 - 글자 크기 변경 → 위치 유지 → 재실행 후 크기 유지
 - 같은 이름 ZIP 재가져오기(교체) → 남은 경로의 진행률·북마크 유지, 사라진 경로의 기록 삭제
 - 서재 검색·정렬
+- 같은 제목 문서 가져오기 → 접미사 자동 부여 → 이름 바꾸기 → 재가져오기(교체) 후에도 바꾼 이름 유지
 - (Chromium) `launchQueue`로 파일 전달 시 가져오기 진행
 
 ### 실기기 체크리스트 (수동)
