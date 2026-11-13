@@ -9,6 +9,7 @@
   import Icon from '../icons/Icon.svelte';
   import Overlay from './Overlay.svelte';
   import RibbonTab from './RibbonTab.svelte';
+  import ScrollHandle from './ScrollHandle.svelte';
   import HintToast from './HintToast.svelte';
   import { layout } from '../layout.svelte';
   import { createSession, type AgentState } from './session';
@@ -24,6 +25,8 @@
   let title = $state('');
   let overlayOpen = $state(false);
   let curPct = $state(0);
+  let curRatio = $state(0);
+  let scrollable = $state(false); // false until the agent reports a scroll range (non-scrolling = pct 100, ratio 0)
   let bookPct = $state(0);
   let pages = $state<string[]>([]);
   let showLine = $state(false); // rendered only once the setting has loaded
@@ -104,6 +107,8 @@
       onPage: (p, t) => {
         path = p;
         curPct = 0; // never show the previous page's position
+        curRatio = 0;
+        scrollable = false;
         refreshBook();
         title = t ?? book?.title ?? '';
         firstPath = null;
@@ -111,6 +116,8 @@
       },
       onScroll: (pct, ratio) => {
         tracker?.update(path, pct, ratio);
+        scrollable = !(pct === 100 && ratio === 0);
+        if (Number.isFinite(ratio)) curRatio = ratio;
         if (Number.isFinite(pct)) curPct = Math.min(100, Math.max(0, pct));
         refreshBook();
       },
@@ -130,6 +137,12 @@
     session.navigate(start);
   }
 
+  let dragHold: (() => void) | null = null;
+  function onDragState(d: boolean) {
+    if (d) dragHold ??= holdOverlay('scroll-handle');
+    else { dragHold?.(); dragHold = null; }
+  }
+  const fileName = $derived(path.split('/').pop() ?? '');
   const go = (dir: -1 | 1) => { const n = neighbor(pages, path, dir); if (n) session?.navigate(n); };
   const prevPath = $derived(neighbor(pages, path, -1));
   const nextPath = $derived(neighbor(pages, path, 1));
@@ -167,6 +180,9 @@
       </div>
     {/snippet}
   </Overlay></div>
+  {#if !layout.desktop && overlayOpen && agent === 'ready' && scrollable}
+    <ScrollHandle ratio={curRatio} label={fileName} onSeek={(r) => session?.post({ type: 'scroll-to', ratio: r })} {onDragState} />
+  {/if}
   {#if !layout.desktop && !overlayOpen}<RibbonTab onopen={openOverlay} />{/if}
   {#if hint && !layout.desktop}<HintToast ondismiss={dismissHint} />{/if}
   {#if showLine}<ProgressLine pct={curPct} hidden={overlayOpen && !layout.desktop} />{/if}
