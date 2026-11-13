@@ -10,6 +10,12 @@ export function pagePct(scrollTop: number, clientHeight: number, scrollHeight: n
 }
 
 export function applyScroll(prev: PageProgress | undefined, bookId: string, path: string, pct: number, ratio: number, now: number): PageProgress {
+  if (!Number.isFinite(pct) || !Number.isFinite(ratio)) {
+    // Invalid input is ignored; with no history, an empty (unread) record is returned.
+    return prev ?? { bookId, path, maxPct: 0, lastScrollRatio: 0, read: false, updatedAt: now };
+  }
+  pct = Math.min(100, Math.max(0, pct));
+  ratio = Math.min(1, Math.max(0, ratio));
   const maxPct = Math.max(prev?.maxPct ?? 0, pct);
   return { bookId, path, maxPct, lastScrollRatio: ratio, read: (prev?.read ?? false) || maxPct >= READ_THRESHOLD, updatedAt: now };
 }
@@ -32,6 +38,7 @@ export class ProgressTracker {
   private map: Map<string, PageProgress>;
   private dirty = new Set<string>();
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private chain: Promise<void> = Promise.resolve();
 
   constructor(
     private bookId: string,
@@ -43,25 +50,49 @@ export class ProgressTracker {
   }
 
   update(path: string, pct: number, ratio: number): PageProgress {
-    const next = applyScroll(this.map.get(path), this.bookId, path, pct, ratio, Date.now());
+    const prev = this.map.get(path);
+    const next = applyScroll(prev, this.bookId, path, pct, ratio, Date.now());
+    if (next === prev) return next; // ignored (invalid input)
     this.map.set(path, next);
     this.dirty.add(path);
-    // Fires once, debounceMs after the first dirty update (not reset by later ones).
-    if (this.timer === null) this.timer = setTimeout(() => { this.timer = null; void this.flush(); }, this.debounceMs);
+    this.schedule();
     return next;
   }
 
   get(path: string): PageProgress | undefined { return this.map.get(path); }
   all(): Map<string, PageProgress> { return new Map(this.map); }
 
-  async flush(): Promise<void> {
+  // Fires once, debounceMs after the first dirty update (not reset by later ones).
+  private schedule(): void {
+    if (this.timer !== null) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.flush().catch(() => { /* doFlush already rescheduled a retry */ });
+    }, this.debounceMs);
+  }
+
+  // Flushes are serialized: a call made while one is running waits for it, then runs.
+  flush(): Promise<void> {
+    const run = this.chain.then(() => this.doFlush());
+    this.chain = run.catch(() => {});
+    return run;
+  }
+
+  private async doFlush(): Promise<void> {
     if (this.timer !== null) { clearTimeout(this.timer); this.timer = null; }
-    const paths = [...this.dirty];
-    this.dirty.clear();
-    for (const path of paths) {
+    let firstError: unknown;
+    let failed = false;
+    for (const path of [...this.dirty]) {
       const p = this.map.get(path);
-      if (!p) continue;
-      try { await this.save({ ...p }); } catch (e) { this.dirty.add(path); throw e; }
+      if (!p) { this.dirty.delete(path); continue; }
+      try {
+        await this.save({ ...p });
+        if (this.map.get(path) === p) this.dirty.delete(path); // a newer update during the save stays dirty
+      } catch (e) {
+        if (!failed) { failed = true; firstError = e; }
+      }
     }
+    if (this.dirty.size > 0) this.schedule();
+    if (failed) throw firstError;
   }
 }
