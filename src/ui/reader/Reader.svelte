@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { getBook, getBookFiles, getProgress, getSetting, setSetting, updateBook, type Book } from '../../lib/storage';
+  import { onMount, tick } from 'svelte';
+  import { getBook, getBookFiles, getProgress, getSetting, setSetting, updateBook, type Book, type PageProgress } from '../../lib/storage';
   import { ProgressTracker, bookProgress, formatPageInfo } from '../../lib/progress';
   import { neighbor, orderedPages } from '../../lib/file-tree';
   import ProgressLine from './ProgressLine.svelte';
@@ -11,6 +11,8 @@
   import RibbonTab from './RibbonTab.svelte';
   import ScrollHandle from './ScrollHandle.svelte';
   import HintToast from './HintToast.svelte';
+  import Panel from './Panel.svelte';
+  import FilesTab from './FilesTab.svelte';
   import { layout } from '../layout.svelte';
   import { createSession, type AgentState } from './session';
 
@@ -34,7 +36,29 @@
   async function dismissHint() { await setSetting('hintSeen', true).catch(() => {}); hint = false; }
   $effect(() => { if (overlayOpen && hint) void dismissHint(); });
   const pageInfo = $derived(pages.length ? formatPageInfo(pages, path, bookPct) : '');
-  const refreshBook = () => { if (book && tracker) bookPct = bookProgress(book.pagePaths, tracker.all()).pct; };
+  let progress = $state<ReadonlyMap<string, PageProgress>>(new Map());
+  const refreshBook = () => { if (book && tracker) { progress = tracker.all(); bookPct = bookProgress(book.pagePaths, progress).pct; } };
+
+  // Panel: mobile bottom sheet (sheetOpen) / desktop docked panel (dockOpen, persisted).
+  let titles = $state<Record<string, string>>({});
+  let sourceName = $state('');
+  let panelTab = $state<'files' | 'bookmarks'>('files');
+  let sheetOpen = $state(false);
+  let dockOpen = $state(false);
+  let panelWidth = $state(320);
+  let panelReady = $state(false); // the panel renders once its saved state is loaded (no slide-in at boot)
+  let btnPanel = $state<HTMLButtonElement>();
+  const panelOpen = $derived(layout.desktop ? dockOpen : sheetOpen);
+  const sheet = $derived(!layout.desktop && sheetOpen);
+  let sheetHold: (() => void) | null = null;
+  function openSheet() { sheetOpen = true; sheetHold ??= holdOverlay('panel'); }
+  function closePanel() {
+    if (layout.desktop) { dockOpen = false; void setSetting('panelOpen', false).catch(() => {}); return; }
+    sheetOpen = false; sheetHold?.(); sheetHold = null;
+    void tick().then(() => btnPanel?.focus());
+  }
+  function openDock() { dockOpen = true; void setSetting('panelOpen', true).catch(() => {}); }
+  function pick(p: string) { session?.navigate(p); if (!layout.desktop) closePanel(); }
 
   export const OVERLAY_HIDE_MS = 3000;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
@@ -67,6 +91,9 @@
   onMount(() => {
     void getSetting('progressLine').then((v) => { showLine = v; }).catch(() => {});
     void getSetting('hintSeen').then((v) => { hint = !v; }).catch(() => {});
+    void Promise.all([getSetting('panelOpen'), getSetting('panelWidth')]).then(([o, w]) => {
+      dockOpen = o && innerWidth >= 1024; panelWidth = w;
+    }).catch(() => {}).finally(() => { panelReady = true; });
     void open();
     window.addEventListener('pagehide', flush);
     document.addEventListener('visibilitychange', onVisibility);
@@ -77,6 +104,7 @@
       flush();
       session?.destroy();
       clearTimeout(hideTimer);
+      sheetHold?.();
     };
   });
 
@@ -90,6 +118,8 @@
     book = b;
     pages = orderedPages(b.pagePaths);
     const files = await getBookFiles(bookId);
+    titles = files?.titles ?? {};
+    sourceName = b.sourceName;
     const progress = await getProgress(bookId);
     if (gone) return;
     tracker = new ProgressTracker(bookId, progress);
@@ -168,9 +198,16 @@
 {/if}
 
 <div class="reader" data-testid="reader" data-book-id={bookId} data-path={path} data-agent={agent} data-overlay={layout.desktop || overlayOpen ? 'open' : 'closed'}
-  hidden={notice !== 'none'}>
-  <iframe bind:this={iframe} data-testid="reader-frame" title="문서"></iframe>
-  <div role="presentation" onpointerdown={pokeOverlay}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back}>
+  hidden={notice !== 'none'} style:--panel-w={layout.desktop && dockOpen ? `${panelWidth}px` : '0px'}>
+  <iframe bind:this={iframe} data-testid="reader-frame" title="문서" inert={sheet}></iframe>
+  <div role="presentation" onpointerdown={pokeOverlay} inert={sheet}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back}>
+    {#snippet topActions()}
+      {#if !layout.desktop}
+        <button type="button" class="act" data-testid="btn-panel" aria-label="파일·북마크" aria-expanded={sheetOpen} bind:this={btnPanel} onclick={openSheet}><Icon name="menu" /></button>
+      {:else if panelReady && !dockOpen}
+        <button type="button" class="act" data-testid="panel-toggle" aria-label="패널 펼치기" aria-expanded="false" onclick={openDock}><Icon name="panel" /></button>
+      {/if}
+    {/snippet}
     {#snippet bottom()}
       <div class="nav">
         <button type="button" data-testid="btn-top" aria-label="맨 위" disabled={agent === 'limited'} onclick={() => session?.post({ type: 'scroll-to', ratio: 0 })}><Icon name="to-top" /></button>
@@ -180,7 +217,18 @@
       </div>
     {/snippet}
   </Overlay></div>
-  {#if !layout.desktop && overlayOpen && agent === 'ready' && scrollable}
+  {#if panelReady}
+    <Panel open={panelOpen} bind:tab={panelTab} onClose={closePanel} bind:width={panelWidth}
+      onWidthCommit={(w) => void setSetting('panelWidth', w).catch(() => {})} onEscape={() => iframe?.focus()}>
+      {#snippet files()}
+        {#if pages.length}
+          <FilesTab open={panelOpen} {sourceName} pagePaths={pages} {titles} {progress} current={path} onpick={pick} />
+        {/if}
+      {/snippet}
+      {#snippet bookmarks()}<p class="empty">북마크가 없습니다</p>{/snippet}
+    </Panel>
+  {/if}
+  {#if !layout.desktop && overlayOpen && !sheetOpen && agent === 'ready' && scrollable}
     <ScrollHandle ratio={curRatio} label={fileName} onSeek={(r) => session?.post({ type: 'scroll-to', ratio: r })} {onDragState} />
   {/if}
   {#if !layout.desktop && !overlayOpen}<RibbonTab onopen={openOverlay} />{/if}
@@ -194,5 +242,7 @@
   .nav { display: flex; justify-content: space-around; align-items: center; min-height: 56px; }
   .nav button { background: none; border: 0; color: var(--text); width: 44px; height: 44px; display: grid; place-items: center; }
   .nav button:disabled { opacity: .35; }
-  iframe { position: fixed; top: var(--sat); left: 0; right: 0; bottom: 0; width: 100%; height: calc(100% - var(--sat)); border: 0; display: block; }
+  .act { background: none; border: 0; color: var(--text); width: 44px; height: 44px; display: grid; place-items: center; }
+  .empty { margin: 32px 16px; text-align: center; color: var(--text-3); }
+  iframe { position: fixed; top: var(--sat); left: 0; right: var(--panel-w); bottom: 0; width: calc(100% - var(--panel-w)); height: calc(100% - var(--sat)); border: 0; display: block; }
 </style>

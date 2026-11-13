@@ -30,7 +30,7 @@
   }
   .bar.closed { opacity: 0; pointer-events: none; }
   .top {
-    top: 0; display: flex; align-items: center; gap: 8px; min-height: 52px;
+    top: 0; right: var(--panel-w, 0px); display: flex; align-items: center; gap: 8px; min-height: 52px;
     padding: var(--sat) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
     border-bottom: 1px solid var(--hairline); box-sizing: content-box;
   }

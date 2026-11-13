@@ -175,6 +175,10 @@ try { const r = indexedDB.deleteDatabase('html-reader'); r.onsuccess = () => __i
     'err-nohtml.zip': z([f('notes.txt', 'hello'), f('style.css', 'body{}')]),
     'err-crc.zip': z([f('index.html', page({ h1: 'crc' }), { corruptCrc: true })]),
     'err-deflate64.zip': z([f('index.html', page({ h1: 'd64' }), { method: 9 })]),
+    'many-pages.zip': z(Array.from({ length: 300 }, (_, i) => {
+      const n = String(i + 1).padStart(3, '0');
+      return f(`p${n}.html`, page({ title: `쪽 ${n}`, h1: `p${n}` }));
+    })),
     'pick-entry.zip': z([f('a.html', page({ title: 'A', h1: 'a' })), f('b.html', page({ title: 'B', h1: 'b' }))]),
   });
   const trunc = z([f('index.html', long({ title: '잘림', h1: 'trunc' }))]);

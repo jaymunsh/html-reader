@@ -133,7 +133,12 @@ export async function openOverlay(page: Page): Promise<void> {
 
 /** Wait for the overlay's transitions to finish (Playwright counts an opacity-0 transformed bar as visible). */
 export async function overlaySettled(page: Page): Promise<void> {
-  await page.getByTestId('overlay-top').evaluate((e) => Promise.all(e.getAnimations({ subtree: true }).map((a) => a.finished)).then(() => undefined));
+  await settled(page, 'overlay-top');
+}
+
+/** Wait for the transitions on a test id's element (and its subtree) to finish before reading geometry. */
+export async function settled(page: Page, testId: string): Promise<void> {
+  await page.getByTestId(testId).evaluate((e) => Promise.all(e.getAnimations({ subtree: true }).map((a) => a.finished)).then(() => undefined));
 }
 
 export async function backToLibrary(page: Page): Promise<void> {

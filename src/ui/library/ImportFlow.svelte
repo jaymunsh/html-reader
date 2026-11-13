@@ -54,7 +54,7 @@
 
 <style>
   .scrim { position: fixed; inset: 0; z-index: 19; background: var(--scrim); }
-  .dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(90vw, 360px);
+  .dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(90vw, 360px); max-height: 80vh; overflow-y: auto; box-sizing: border-box;
     padding: 20px; border-radius: var(--r-sheet); background: var(--surface); }
   .dialog button { min-height: 44px; border-radius: var(--r-control); margin-right: 8px; }
 </style>
