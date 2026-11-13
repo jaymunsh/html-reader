@@ -1,6 +1,7 @@
 import { commitNewBook, listBooks, withImportLock } from '../storage';
 import type { Book } from '../storage';
-import { ImportError, type ImportErrorCode } from './errors';
+import { ImportError, toImportError, type ImportErrorCode } from './errors';
+import { dedupeTitle } from '../title';
 import { verifyCacheReady, type ReadyPayload } from './verify';
 
 export type ImportMode = { kind: 'new' } | { kind: 'replace'; bookId: string };
@@ -11,28 +12,35 @@ export interface ImportHooks {
 
 /**
  * The worker stays alive while the page verifies: on WebKit (with a controlling service worker) Cache API
- * writes made by a worker are dropped if it is terminated right after finishing. Only once the page can read
- * every entry back is the worker terminated and the book committed to IndexedDB.
+ * writes made by a worker are dropped if it is terminated right after finishing. Verify, terminate and commit
+ * run under ONE import lock so a concurrent cleanupOrphans cannot delete the cache between verify and commit.
  */
 async function commitReady(p: ReadyPayload, terminate: () => void): Promise<string> {
   try {
-    const ok = await verifyCacheReady(caches, p, { timeoutMs: 15_000 });
-    terminate();
-    if (!ok) throw new ImportError('failed', 'cache verification timed out');
-    await withImportLock(() => commitNewBook(p.book, p.bookFiles, p.texts));
-    return p.book.id;
+    return await withImportLock(async () => {
+      const ok = await verifyCacheReady(caches, p);
+      terminate();
+      if (!ok) throw new ImportError('failed', 'cache verification timed out');
+      // Titles may have changed since the worker planned this book (concurrent imports).
+      const title = dedupeTitle(p.baseTitle, (await listBooks()).map((b) => b.title));
+      await commitNewBook({ ...p.book, title }, p.bookFiles, p.texts);
+      return p.book.id;
+    });
   } catch (e) {
     terminate();
     await caches.delete(p.cacheName).catch(() => {});
-    throw e;
+    throw toImportError(e);
   }
 }
 
 export function importFile(file: File, mode: ImportMode, hooks: ImportHooks): Promise<string> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./importer.worker.ts', import.meta.url), { type: 'module' });
+    // Once the worker reported `ready`, only commitReady settles the promise; late worker events are ignored.
+    let readySeen = false;
     const finish = (fn: () => void) => { worker.terminate(); fn(); };
     worker.onmessage = (ev: MessageEvent) => {
+      if (readySeen) return;
       const m = ev.data;
       if (m.type === 'progress') hooks.onProgress?.(m.done, m.total);
       else if (m.type === 'need-entry') {
@@ -41,10 +49,14 @@ export function importFile(file: File, mode: ImportMode, hooks: ImportHooks): Pr
           () => worker.postMessage({ type: 'entry', path: null }),
         );
       } else if (m.type === 'ready') {
-        commitReady(m as ReadyPayload & { type: string }, () => worker.terminate()).then(resolve, (e) => reject(e instanceof ImportError ? e : new ImportError('failed', String(e))));
+        readySeen = true;
+        commitReady(m as ReadyPayload & { type: string }, () => worker.terminate()).then(resolve, reject);
       } else if (m.type === 'error') finish(() => reject(new ImportError(m.code as ImportErrorCode, m.detail)));
     };
-    worker.onerror = (e) => finish(() => reject(new ImportError('failed', e.message)));
+    worker.onerror = (e) => {
+      if (readySeen) return;
+      finish(() => reject(new ImportError('failed', e.message)));
+    };
     worker.postMessage({ type: 'start', file, mode });
   });
 }

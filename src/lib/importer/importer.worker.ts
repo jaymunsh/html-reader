@@ -1,11 +1,11 @@
-import { ImportError, type ImportErrorCode } from './errors';
+import { ImportError, toImportError } from './errors';
 import { isHtmlPath, pickEntryPath, planEntries, precheck, sourceNameOf } from './plan';
 import { dedupeTitle, defaultTitle } from '../title';
 import { decodeHtml, detectEncoding, extractTitle, isFullDocument } from '../html-meta';
 import { extractText } from '../text-extract';
 import { mimeFor } from '../mime';
 import { cacheKey, naturalComparePaths } from '../path';
-import { readCentralDirectory, readEntry, ZipError } from '../zip';
+import { readCentralDirectory, readEntry } from '../zip';
 import { cacheNameFor, listBooks, newBookId, withImportLock } from '../storage';
 import type { Book, BookFiles, TextRecord } from '../storage';
 import type { ReadyPayload } from './verify';
@@ -41,13 +41,6 @@ async function loadItems(file: File): Promise<Item[]> {
   const { files } = planEntries(await readCentralDirectory(file));
   precheck(files, (await navigator.storage?.estimate?.()) ?? null);
   return files.map((f) => ({ path: f.path, size: f.entry.uncompressedSize, read: (onBytes) => readEntry(file, f.entry, onBytes) }));
-}
-
-function toImportError(e: unknown): ImportError {
-  if (e instanceof ImportError) return e;
-  if (e instanceof ZipError) return new ImportError(e.code as ImportErrorCode, e.message);
-  if (e instanceof DOMException && e.name === 'QuotaExceededError') return new ImportError('quota', e.message);
-  return new ImportError('failed', e instanceof Error ? e.message : String(e));
 }
 
 async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
@@ -99,7 +92,8 @@ async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
       }
       const sourceName = sourceNameOf(file.name).normalize('NFC');
       const existing = (await listBooks()).map((b) => b.title);
-      const title = dedupeTitle(defaultTitle(titles[entryPath] ?? '', sourceName), existing);
+      const baseTitle = defaultTitle(titles[entryPath] ?? '', sourceName);
+      const title = dedupeTitle(baseTitle, existing);
       const now = Date.now();
       const book: Book = {
         id: bookId, title, sourceName, cacheName, entryPath, pagePaths, fileCount: items.length, totalBytes: total,
@@ -107,7 +101,7 @@ async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
       };
       if ((await cache.keys()).length !== items.length) throw new ImportError('failed', 'cache write verification failed');
       const bookFiles: BookFiles = { bookId, paths: items.map((i) => i.path), titles };
-      return { book, bookFiles, texts, cacheName, entrySize: sizes[entryPath] };
+      return { book, bookFiles, texts, cacheName, entrySize: sizes[entryPath], baseTitle };
     } catch (e) {
       await caches.delete(cacheName).catch(() => {});
       throw e;

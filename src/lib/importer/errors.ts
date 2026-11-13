@@ -1,6 +1,8 @@
 export type ImportErrorCode = 'not-zip' | 'corrupt' | 'multi-disk' | 'encrypted' | 'unsupported-method' | 'crc-mismatch'
   | 'no-html' | 'too-large' | 'bomb' | 'quota' | 'unsupported-file' | 'cancelled' | 'failed';
 
+import { ZipError } from '../zip';
+
 export class ImportError extends Error {
   constructor(public code: ImportErrorCode, public detail?: string) {
     super(detail ? `${code}: ${detail}` : code);
@@ -29,4 +31,11 @@ const MESSAGES: Record<ImportErrorCode, string> = {
 
 export function importErrorMessage(code: ImportErrorCode): string {
   return MESSAGES[code];
+}
+
+export function toImportError(e: unknown): ImportError {
+  if (e instanceof ImportError) return e;
+  if (e instanceof ZipError) return new ImportError(e.code as ImportErrorCode, e.message);
+  if (e instanceof DOMException && e.name === 'QuotaExceededError') return new ImportError('quota', e.message);
+  return new ImportError('failed', e instanceof Error ? e.message : String(e));
 }

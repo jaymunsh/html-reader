@@ -8,6 +8,8 @@ export interface ReadyPayload {
   texts: TextRecord[];
   cacheName: string;
   entrySize: number;
+  /** Title before de-duplication; the page re-dedupes it against the current list inside the lock. */
+  baseTitle: string;
 }
 
 export interface CacheStorageLike {
@@ -16,6 +18,8 @@ export interface CacheStorageLike {
     match(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | undefined>;
   }>;
 }
+
+export const VERIFY_TIMEOUT_MS = 15_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -28,7 +32,7 @@ export async function verifyCacheReady(
   p: Pick<ReadyPayload, 'book' | 'cacheName' | 'entrySize'>,
   opts: { timeoutMs?: number; intervalMs?: number } = {},
 ): Promise<boolean> {
-  const deadline = Date.now() + (opts.timeoutMs ?? 10_000);
+  const deadline = Date.now() + (opts.timeoutMs ?? VERIFY_TIMEOUT_MS);
   const interval = opts.intervalMs ?? 100;
   const key = cacheKey(p.book.id, p.book.entryPath);
   for (;;) {
