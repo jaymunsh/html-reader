@@ -51,6 +51,12 @@ test('G6 no-referrer 문서에서도 루트 절대 CSS·링크가 동작한다(a
 
 test('G7 SW가 iframe 네비게이션과 최상위 네비게이션을 구분한다', async ({ page }) => {
   const frame = await seed(page);
-  await page.goto(`/book/${frame.id}/index.html`);                     // 최상위 창으로 열기
-  await expect(page).toHaveURL(new RegExp(`/\\?open=${frame.id}&path=index\\.html$`));
+  const res = await page.goto(`/book/${frame.id}/index.html`);         // 최상위 창으로 열기
+  // 셸이 시작 시 주소를 /로 정리하므로, SW의 /?open= 리다이렉트는 리다이렉트 응답에서 확인한다.
+  const from = res!.request().redirectedFrom();
+  expect(from).not.toBeNull();
+  expect((await from!.response())!.headers().location).toMatch(new RegExp(`/\\?open=${frame.id}&path=index\\.html$`));
+  await expect(page.getByTestId('reader')).toBeVisible();
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-book-id', frame.id);
+  await expect(page.getByTestId('reader-frame')).toHaveAttribute('src', `/book/${frame.id}/index.html`);
 });

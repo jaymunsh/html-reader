@@ -94,3 +94,39 @@ export async function mountRawFrame(page: Page, id: string, path: string): Promi
   if (!frame) throw new Error('iframe has no frame');
   return frame;
 }
+
+/** Click the book card and wait until the agent state has settled (not 'pending'). */
+export async function openBook(page: Page, bookId: string): Promise<Frame> {
+  await page.locator(`[data-testid=book-card][data-book-id="${bookId}"]`).click();
+  await expect(page.getByTestId('reader')).toBeVisible();
+  await expect(page.getByTestId('reader')).not.toHaveAttribute('data-agent', 'pending', { timeout: 10_000 });
+  return bookFrame(page);
+}
+
+/** The frame whose URL is under /book/. */
+export function bookFrame(page: Page): Frame {
+  const f = page.frames().find((fr) => {
+    try { return new URL(fr.url()).pathname.startsWith('/book/'); } catch { return false; }
+  });
+  if (!f) throw new Error('no /book/ frame');
+  return f;
+}
+
+export async function backToLibrary(page: Page): Promise<void> {
+  await page.getByTestId('reader-back').click();
+  await expect(page.getByTestId('library')).toBeVisible();
+}
+
+/** Scroll the main scroll container (document or largest inner scroller) to a 0-1 ratio. */
+export async function scrollFrameTo(frame: Frame, ratio: number): Promise<void> {
+  await frame.evaluate((r) => {
+    let best: Element = document.scrollingElement ?? document.documentElement;
+    let bestRange = best.scrollHeight - best.clientHeight;
+    for (const el of document.querySelectorAll('*')) {
+      const oy = getComputedStyle(el).overflowY;
+      const range = el.scrollHeight - el.clientHeight;
+      if ((oy === 'auto' || oy === 'scroll') && range > bestRange) { best = el; bestRange = range; }
+    }
+    best.scrollTop = r * bestRange;
+  }, ratio);
+}

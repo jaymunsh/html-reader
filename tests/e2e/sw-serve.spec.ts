@@ -100,6 +100,12 @@ test('묶음에 없는 페이지로 이동하면 안내 HTML', async ({ page }) 
 
 test('최상위 창으로 /book/…을 열면 리더로 되돌아온다', async ({ page }) => {
   const { id } = await setup(page, '01-multipage.zip');
-  await page.goto(`/book/${id}/sub/page3.html`);
-  await expect(page).toHaveURL(new RegExp(`/\\?open=${id}&path=sub%2Fpage3\\.html$`));
+  const res = await page.goto(`/book/${id}/sub/page3.html`);
+  // 셸이 시작 시 주소를 /로 정리하므로, SW의 /?open= 리다이렉트는 리다이렉트 응답에서 확인한다.
+  const from = res!.request().redirectedFrom();
+  expect(from).not.toBeNull();
+  expect((await from!.response())!.headers().location).toMatch(new RegExp(`/\\?open=${id}&path=sub%2Fpage3\\.html$`));
+  await expect(page.getByTestId('reader')).toBeVisible();
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-book-id', id);
+  await expect(page.getByTestId('reader-frame')).toHaveAttribute('src', `/book/${id}/sub/page3.html`);
 });

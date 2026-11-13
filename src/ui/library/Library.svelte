@@ -5,6 +5,7 @@
   import ImportFlow from './ImportFlow.svelte';
 
   let books = $state<Book[]>([]);
+  let { onopen }: { onopen: (id: string) => void } = $props();
   let input: HTMLInputElement;
   let flow: ImportFlow;
 
@@ -28,6 +29,6 @@
     accept=".zip,.html,.htm,application/zip,text/html" {onchange} />
   <ImportFlow bind:this={flow} onimported={refresh} />
   {#each books as book (book.id)}
-    <BookCard {book} />
+    <BookCard {book} {onopen} />
   {/each}
 </main>
