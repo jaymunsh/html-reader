@@ -65,3 +65,13 @@ test('맥락: 앱 자신의 클라이언트(셸·앱 워커)는 폴백 없음', 
   expect(c({ client: { pathname: '/__app/x.js', frameType: null, type: 'sharedworker' } })).toEqual({ bookId: null, useFallback: false });
   expect(c({ client: { pathname: '/__reader/agent.js', frameType: null, type: 'worker' } })).toEqual({ bookId: null, useFallback: false });
 });
+test('맥락: 최상위 클라이언트(셸)는 맥락 없음, book 경로면 book', () => {
+  expect(c({ client: { pathname: '/index.html', frameType: 'top-level', type: 'window' } })).toEqual({ bookId: null, useFallback: false });
+  expect(c({ client: { pathname: '/anything/else', frameType: 'top-level', type: 'window' } })).toEqual({ bookId: null, useFallback: false });
+  expect(c({ client: { pathname: '/book/ab/x.html', frameType: 'top-level', type: 'window' } })).toEqual({ bookId: 'ab', useFallback: false });
+});
+test('4b. /book/<id> 슬래시 없는 네비게이션은 슬래시로 리다이렉트', () => {
+  expect(r('/book/ab', { nav: true, dest: 'iframe', ctx: 'ab' })).toEqual({ kind: 'book-redirect', to: '/book/ab/' });
+  expect(r('/book/ab?x=1', { nav: true, dest: 'iframe', ctx: 'ab' })).toEqual({ kind: 'book-redirect', to: '/book/ab/?x=1' });
+  expect(r('/book/ab', { dest: 'image', ctx: 'ab' })).toEqual({ kind: 'book-file', bookId: 'ab', rest: '', ctxBookId: 'ab' });
+});

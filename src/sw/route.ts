@@ -29,6 +29,7 @@ function safeDecode(s: string): string {
 
 /** §5.2 — decides how to serve a request. */
 export function decideRoute(i: RouteInput): Route {
+  // i.method is intentionally ignored: there is no server, and book context always maps into the book.
   const { url, ctxBookId } = i;
   if (url.origin !== i.selfOrigin) {
     return ctxBookId ? { kind: 'external', bookId: ctxBookId } : { kind: 'passthrough' };
@@ -41,6 +42,8 @@ export function decideRoute(i: RouteInput): Route {
     const qs = new URLSearchParams({ open: book.bookId, path: safeDecode(book.rest) });
     return { kind: 'top-redirect', to: `/?${qs.toString()}` };
   }
+  // /book/<id> without a slash would resolve relative links against /book/.
+  if (i.isNavigation && /^\/book\/[^/]+$/.test(p)) return { kind: 'book-redirect', to: `${p}/${url.search}` };
   if (!book && ctxBookId) {
     if (i.isNavigation) return { kind: 'book-redirect', to: `/book/${ctxBookId}${p}${url.search}` };
     return { kind: 'book-file', bookId: ctxBookId, rest: p.slice(1), ctxBookId };

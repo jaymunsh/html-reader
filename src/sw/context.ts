@@ -35,6 +35,8 @@ export function pickContext(i: ContextInput): PickedContext {
   if (p == null) return FALLBACK;
   const b = splitBookUrl(p);
   if (b) return { bookId: b.bookId, useFallback: false };
+  // Top-level clients are the app shell (served for /index.html and unknown paths).
+  if (i.client?.frameType === 'top-level') return NONE;
   // The app shell and the app's own workers (e.g. Import Worker) are not book contexts.
   if (isAppPath(p)) return NONE;
   return FALLBACK;
