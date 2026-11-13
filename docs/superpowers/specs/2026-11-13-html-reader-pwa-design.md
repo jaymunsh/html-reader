@@ -1,7 +1,7 @@
 # HTML Reader PWA — 설계 스펙
 
 - 작성일: 2026-11-13
-- 개정: v2 — 독립 리뷰(Fable) 반영
+- 개정: v3 — 독립 리뷰(Fable) 반영, 브라우저 기반 검증·페이지 확대·iOS 상단 단순화
 - 상태: 사용자 검토 대기
 
 ## 1. 목적과 범위
@@ -18,8 +18,7 @@ PC(macOS·Windows)와 모바일(iOS·Android)에서 **일반 브라우저와 동
 2. 페이지별 읽기 진행률과 이어 읽기가 동작한다.
 3. 긴 문서에서 목차·빠른 스크롤로 원하는 위치를 쉽게 찾는다.
 4. 평상시 리더 UI는 문서 공간을 차지하지 않는다.
-5. iOS 26 홈 화면 앱에서 상단 상태바 영역이 문서와 자연스럽게 이어진다(의도치 않은 blur·겹침 없음).
-   구체적인 구현 방식은 P0 실기기 스파이크에서 확정한다(§12).
+5. iOS 26에서 상단 상태바 영역에 문서 내용이 비쳐 blur되거나 겹치지 않는다. 상단 영역은 앱 배경색으로 통일된다(§6.6).
 6. 최초 1회 접속 후 완전 오프라인으로 동작한다.
 7. 문서 전체 텍스트 검색, 북마크, 글자 크기 조절, 수정본 재가져오기, 문서명 수정, 서재 검색·정렬, 바로 열기 연동이 동작한다(§7).
 
@@ -65,7 +64,7 @@ SW가 아직 제어하지 않는 상태에서 `/book/*` 요청이 호스트로 �
 | PWA | `vite-plugin-pwa` (injectManifest) | 앱 셸 프리캐시 + 커스텀 SW 로직 |
 | ZIP | 자체 중앙 디렉터리 파서 + `fflate`의 `Inflate`(동기 스트림) | 임의 접근으로 정확한 용량·진행률, 엔트리별 메모리 상한 |
 | 단위 테스트 | Vitest | |
-| E2E | Playwright (Chromium, WebKit) | Playwright WebKit은 iOS Safari가 아니므로 iOS 고유 동작은 실기기로 검증(§11.3) |
+| E2E | Playwright (Chromium, WebKit, 모바일 에뮬레이션) | 브라우저 기반 자동 테스트로 검증. iOS 고유 동작은 범위 밖(§11.3) |
 
 앱 자체 정적 자산(JS·CSS·아이콘·매니페스트)은 문서의 루트 절대경로와 겹치지 않도록 **모두 `/__app/` 아래**에 둔다.
 reader-agent는 `/__reader/agent.js`에 둔다. 앱 HTML은 `/`(=`/index.html`)만 쓴다.
@@ -109,7 +108,7 @@ reader-agent는 `/__reader/agent.js`에 둔다. 앱 HTML은 `/`(=`/index.html`)�
 | `range` | Range 헤더 파싱 → 206/416 응답 생성 | 없음 |
 | `inject` | HTML 바이트에 agent 스크립트 태그 삽입 | 없음(순수 함수) |
 | `sw` | 요청 주체 판별, 라우팅, 리다이렉트, 파일 응답, 리소스 이슈 기록, 업데이트 수명주기 | `path`, `mime`, `range`, `inject`, `storage` |
-| `reader-agent` | iframe 내부: 가드 설치, 스크롤 컨테이너 탐지, 진행률, 탭 판별, 목차, 섹션 추적, 배경색 보고, 검색 위치 찾기, 키 전달, 링크 정규화 | 없음(셸과 postMessage) |
+| `reader-agent` | iframe 내부: 가드 설치, 스크롤 컨테이너 탐지, 진행률, 탭 판별, 목차, 섹션 추적, 검색 위치 찾기, 키 전달, 링크 정규화 | 없음(셸과 postMessage) |
 | `protocol` | 셸 ↔ agent 메시지 타입 정의와 검증(공유 모듈) | 없음 |
 | `progress` | 페이지별/문서별 진행률 계산·디바운스 저장 | `storage` |
 | `search` | 문서 전체 검색, 결과 스니펫 생성 | `storage` |
@@ -119,7 +118,7 @@ reader-agent는 `/__reader/agent.js`에 둔다. 앱 HTML은 `/`(=`/index.html`)�
 ### 4.2 데이터 모델
 
 **Cache Storage** — 캐시 이름은 `books.cacheName`(예: `book-<id>-v<n>`), 키 `/book/<id>/<저장 경로>`, 값 `Response(blob, {Content-Type, Content-Length})`.
-저장 경로는 NFC 정규화된 ZIP 내 경로(문서 루트 기준)다. 대용량 미디어의 저장 방식은 P0 스파이크 결과에 따라 확정한다(§12).
+저장 경로는 NFC 정규화된 ZIP 내 경로(문서 루트 기준)다. 미디어를 포함한 모든 파일을 같은 방식(파일 1개 = Response 1개)으로 저장한다.
 
 **IndexedDB `html-reader`** (스키마 버전을 두고 `onupgradeneeded`에서 단계별로 마이그레이션한다)
 - `books`: `{ id, title, sourceName, cacheName, entryPath, pagePaths[], fileCount, totalBytes, importedAt, lastOpenedAt, lastPath, textScale }`
@@ -172,7 +171,7 @@ reader-agent는 `/__reader/agent.js`에 둔다. 앱 HTML은 `/`(=`/index.html`)�
 3. SW가 파일로 응답하고, 네비게이션 HTML이면 agent를 주입한다(§5.4).
 4. **핸드셰이크**(§6.7): agent `ready` → 셸 `init{textScale, restore?}` → agent가 적용 후 보고 시작.
 5. agent는 스크롤 시 `scroll{pct, ratio}`, 탭 시 `tap`, 섹션 변경 시 `section{id}`, 키 입력 시 `key{...}`를 보낸다.
-6. iframe 안에서 페이지를 이동하면 새 페이지의 `ready`가 온다. 셸은 그때 `lastPath`를 갱신하고 상단 색을 다시 맞춘다.
+6. iframe 안에서 페이지를 이동하면 새 페이지의 `ready`가 온다. 셸은 그때 `lastPath`를 갱신하고 목차·페이지 정보를 갱신한다.
 7. 셸이 진행률을 갱신한다(메모리 갱신 + 1초 디바운스 저장, `pagehide`·`visibilitychange(hidden)` 시 즉시 저장).
 
 ## 5. Service Worker 라우팅
@@ -230,6 +229,7 @@ reader-agent는 `/__reader/agent.js`에 둔다. 앱 HTML은 `/`(=`/index.html`)�
   - 범위를 벗어나면 `416`과 `Content-Range: bytes */total`
   - 다중 범위는 첫 범위만 응답한다.
 - Range가 없는 미디어 요청에도 `Accept-Ranges: bytes`를 붙인다.
+- 영상 재생은 "재생되면 된다" 수준으로 지원한다. 대용량 영상 최적화는 하지 않으며, 수백 MB 이상의 영상은 iOS에서 느리거나 재생이 실패할 수 있다(수용한 제약).
 
 ### 5.6 MIME
 `mime` 단위가 결정한다. `html/htm`, `xhtml`, `css`, `js/mjs`(`text/javascript`), `json`, `svg`, `wasm`, `woff2/woff/ttf/otf`,
@@ -291,29 +291,26 @@ DOM 변경(`ResizeObserver` + 지연 재탐지)에 대응하며, 진행률·핸�
 ### 6.6 iOS 상단 영역 (Liquid Glass 대응)
 **배경**(커뮤니티 확인 동작이며 Apple 공식 문서는 없음, 버전마다 다를 수 있음):
 - iOS 26 Safari는 상단·하단 바 색을 정할 때 `theme-color`를 사실상 쓰지 않는다. 기본적으로 `body`(또는 `html`) 배경색을 쓰고,
-  화면 가장자리에 닿은 fixed 요소가 있으면 그 배경색이 우선한다. 색은 초기 페인트 시점에 고정된다는 보고가 있다.
-- Safari 탭에서는 `env(safe-area-inset-top)`이 0이다. 홈 화면 앱에서만 상단 safe-area가 생긴다.
-- `apple-mobile-web-app-status-bar-style`은 실행 시점에 고정되어 런타임에 바꿀 수 없다.
-  `black-translucent`는 상태바 글자색을 페이지에 맞춰 주지 않아 밝은 문서에서 시계 등이 안 보일 수 있다. iOS 26.1 회귀 보고(WebKit bug 301994)도 있다.
+  화면 가장자리에 닿은 fixed 요소가 있으면 그 배경색이 우선한다. 그런 색이 없으면 바 아래로 콘텐츠가 비쳐 blur된다.
+- `apple-mobile-web-app-status-bar-style: black-translucent`는 콘텐츠를 상태바 아래까지 끌어올리지만 상태바 글자색을 페이지에 맞춰 주지 않아
+  밝은 문서에서 시계 등이 안 보일 수 있고, iOS 26.1 회귀 보고(WebKit bug 301994)도 있다.
 
-**대응**:
-- 1차 수단: 셸의 `html`·`body` `background-color`를 **현재 문서의 배경색**으로 동기화한다.
-  agent가 `body` 배경색(투명하면 `html`, 그것도 투명하면 흰색)을 `ready` 때와 변경 시 보고하고, 셸은 페이지 이동 때마다 갱신한다.
-  첫 렌더 때는 직전에 읽던 문서의 배경색(없으면 흰색)으로 시작해 초기 고정 문제를 줄인다.
-- 2차 수단(standalone에서만): `position: fixed; top: 0; height: env(safe-area-inset-top)` 띠를 같은 색으로 깐다. 하단 safe-area도 같다.
+**대응 — 단순하고 예측 가능한 방식으로 통일한다**:
+- **상단 영역은 앱 배경색으로 통일**한다. 문서 내용을 상태바 아래로 끌어올리지 않는다.
+  - `apple-mobile-web-app-status-bar-style`은 `default`로 둔다(상태바 글자색은 시스템이 처리).
+  - 셸의 `html`·`body` `background-color`와 `theme-color` 메타, 매니페스트 `theme_color`·`background_color`를 **앱 배경색 하나**로 맞춘다.
+    라이트/다크 모드에 따라 두 값을 둔다(`prefers-color-scheme`).
+  - 셸 최상단에 앱 배경색의 fixed 요소(상단 바 자리)를 항상 두어, Safari 탭에서도 상단 바가 문서 내용 대신 이 색을 쓰게 한다.
 - iframe은 `top: env(safe-area-inset-top)`부터 `bottom: env(safe-area-inset-bottom)`까지 배치해 내용이 상태바나 홈 인디케이터에 가려지지 않게 한다.
-- `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`
-- `theme-color` 메타도 함께 갱신한다(다른 브라우저, 설치형 웹앱 대응).
-- **상태바 스타일(`default` vs `black-translucent`)과 밝은 배경에서의 글자 대비 처리는 P0 스파이크에서 결정**한다.
-  후보: (a) `default` + 매니페스트 색 조합, (b) `black-translucent` + 문서 배경이 밝으면 띠만 어둡게.
-  iOS 26.0 / 26.1 / 최신 버전 실기기에서 비교한다.
+- `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">` — `user-scalable=no`나 `maximum-scale`은 두지 않는다(핀치 확대 허용, §7.4).
+- 문서 배경색에 맞춰 상단 색을 바꾸는 동적 동기화는 하지 않는다. 검증할 수 없는 iOS 버전별 동작에 의존하지 않기 위해서다.
 
 ### 6.7 셸 ↔ agent 프로토콜
 - **활성 조건**: agent는 `window.parent === window.top`이고 부모가 같은 출처의 리더 셸일 때만 활성화된다. 중첩 iframe이나 frameset 자식 안에서는 가드(§9.4)만 설치하고 보고는 하지 않는다.
 - **메시지 검증**: 모든 메시지에 `protocolVersion`과 `type`을 둔다. 셸은 `event.origin`이 자기 출처이고 `event.source === iframe.contentWindow`일 때만 처리한다.
   버전이 다르면 agent 없는 모드로 동작하고 서재로 돌아갈 때 업데이트를 적용한다(§10).
 - **핸드셰이크**:
-  1. agent는 `DOMContentLoaded`에 `ready{path, title, bgColor, outline}`을 보낸다.
+  1. agent는 `DOMContentLoaded`에 `ready{path, title, outline}`을 보낸다.
   2. 셸은 `init{textScale, restore?: {scrollRatio} | {find} | {bookmark}}`로 응답한다.
   3. agent는 복원 위치를 적용하고, `load` 이후 레이아웃이 안정될 때까지(ResizeObserver 변화가 500ms 동안 없을 때, 최대 3초) 다시 적용한다.
      사용자가 직접 스크롤하면 재적용을 즉시 멈춘다.
@@ -349,14 +346,13 @@ DOM 변경(`ResizeObserver` + 지연 재탐지)에 대응하며, 진행률·핸�
 - 오버레이의 🔖 또는 `B`로 현재 위치(`path`, `scrollRatio`, 현재 섹션 제목)를 저장한다. 같은 페이지에서 비율 차이 2% 이내에 북마크가 이미 있으면 해제한다.
 - ☰ 패널의 북마크 탭에서 목록(섹션 제목·페이지·만든 날짜)을 보고, 누르면 이동하며, 밀거나 삭제 버튼으로 지운다.
 
-### 7.4 글자 크기 조절
-CSS `zoom`은 텍스트 크기가 아니라 페이지 전체 확대여서, 모바일에서는 `100vw` 요소나 고정 폭 레이아웃이 화면을 넘어 가로 스크롤이 생긴다. 그래서 플랫폼별로 방식을 나눈다.
-- **모바일(iOS Safari, Android Chrome)**: 문서 루트에 `text-size-adjust: N%`(iOS는 `-webkit-text-size-adjust` 병기)를 적용한다. 레이아웃은 그대로 두고 글자만 커진다.
-- **PC**: 문서 루트에 CSS `zoom`을 적용한다(페이지 확대).
-- 판별은 `(pointer: coarse)` 미디어쿼리 기준으로 한다.
-- 단계: 80·90·100·110·125·150·175·200%, 문서별 `textScale`로 저장한다. UI 명칭은 "글자 크기"로 하되 PC 툴팁에는 "페이지 확대"라고 적는다.
+### 7.4 확대 (글자 크기)
+브라우저 확대와 같은 방식으로 통일한다.
+- **확대 버튼**(`가-` `가+`, 단축키 `+`/`-`): 모든 플랫폼에서 문서 루트에 CSS `zoom`을 적용한다(PC 브라우저의 `Ctrl +`와 같은 페이지 확대).
+  고정 폭 레이아웃은 확대 시 가로 스크롤이 생길 수 있으며, 이는 브라우저 확대와 같은 동작으로 수용한다.
+- **핀치 확대(돋보기)**: 모바일의 두 손가락 확대를 막지 않는다(§6.6 viewport 설정). 이 확대는 저장하지 않는 일시적 확대다.
+- 단계: 80·90·100·110·125·150·175·200%, 문서별 `textScale`로 저장한다.
 - 적용은 SW 주입 시 `data-scale`로 첫 페인트 전에 한다(§5.4). 바꾸면 바꾸기 직전의 `scrollRatio`를 유지하도록 다시 스크롤한다.
-- 모바일에서 `text-size-adjust`가 기대대로 동작하는지는 P0 스파이크에서 함께 확인한다. 동작하지 않으면 모바일도 `zoom`으로 되돌리고 상한을 150%로 둔다.
 
 ### 7.5 바로 열기 연동 (P4, Android·PC)
 - **PC(Chromium 설치 앱 전용)**: 매니페스트 `file_handlers`에 `.zip`, `.html`, `.htm`을 등록하고, `launchQueue`로 받은 파일을 가져오기로 넘긴다.
@@ -391,8 +387,8 @@ CSS `zoom`은 텍스트 크기가 아니라 페이지 전체 확대여서, 모�
 | 앱 시작 | 앱 셸 프리캐시, 서재는 `books` 메타만 읽음, 고아 정리는 첫 화면 표시 후 유휴 시간에 | 오프라인 재실행 시 1초 이내 표시 |
 | 번들 | Svelte + 코드 분할(리더/서재), agent는 별도 소형 번들 | 초기 JS 50KB(gzip) 이하, agent 8KB(gzip) 이하 |
 
-가장 큰 단일 엔트리(예: 수백 MB 동영상)는 Blob으로 모이는 동안 메모리를 쓴다. iOS 메모리 한도와 대용량 Range 성능은 P0 스파이크에서 확인하고,
-문제가 있으면 임계값(예: 32MB) 이상 파일을 4MB 청크로 나눠 저장하는 방식으로 바꾼다(§12).
+가장 큰 단일 엔트리(예: 수백 MB 동영상)는 Blob으로 모이는 동안 메모리를 쓴다. 이런 대용량 엔트리는 iOS에서 메모리 부족으로 가져오기가 실패할 수 있으며,
+이 경우 가져오기를 롤백하고 원인을 안내한다(수용한 제약, §5.5).
 
 ## 9. 에러 처리와 제약
 
@@ -477,15 +473,12 @@ agent는 주입 위치상 문서의 다른 스크립트보다 먼저 실행된�
 - 새 SW 버전 배포 → 리더 열림 중에는 적용 안 됨 → 서재에서 적용
 - (Chromium) `launchQueue`로 파일 전달 시 가져오기 진행
 
-### 11.3 실기기 체크리스트 (수동)
-Playwright WebKit은 iOS Safari가 아니므로 다음은 실기기로만 검증한다.
-- iOS 26.0 / 26.1 / 최신 홈 화면 앱: 상단 색이 문서 배경과 일치하는지, blur·겹침이 없는지, 페이지 이동 후 색이 갱신되는지, 밝은 문서에서 상태바 글자가 보이는지, 노치·홈 인디케이터 영역
-- iOS Safari 탭: 홈 화면 추가 안내, 임시 보관 경고, 상단·하단 바 틴트
-- iOS 대용량 동영상(300MB 이상) 재생과 탐색, 대용량 ZIP(200MB 이상) 가져오기 중 메모리 종료 여부
-- 모바일 `text-size-adjust` 동작(iOS, Android)
-- Android Chrome(설치/미설치), share target으로 ZIP 공유(여러 파일 관리자)
-- Windows·macOS Chrome/Edge(설치 앱 파일 연결 포함), macOS Safari
-- 각 기기에서 오프라인 재실행
+### 11.3 검증 범위
+- 검증은 **브라우저 기반 자동 테스트**(Playwright Chromium·WebKit, 데스크톱과 모바일 에뮬레이션: iPhone·Pixel 프리셋, 터치 입력)로 한다.
+  Xcode(iOS 시뮬레이터)와 Android 에뮬레이터는 쓰지 않는다.
+- 모바일 에뮬레이션으로 확인하는 것: 터치 탭 토글, 바텀시트, 빠른 스크롤 핸들 드래그, safe-area 변수를 흉내 낸 레이아웃, 핀치 확대 허용(viewport 메타).
+- 자동 테스트로 검증할 수 없는 것(iOS 상태바 실제 색, 홈 화면 앱 저장소 분리, share target, 설치 앱 파일 연결)은 구현만 하고,
+  사용자가 원할 때 실제 기기에서 가볍게 확인한다. 확인용 짧은 체크리스트를 README에 둔다.
 
 ## 12. 단계
 
@@ -493,14 +486,10 @@ Playwright WebKit은 iOS Safari가 아니므로 다음은 실기기로만 검증
 
 | 단계 | 내용 | 종료 조건 |
 |---|---|---|
-| **P0 실기기 스파이크** (버리는 코드) | SW + iframe + 루트 절대경로 리다이렉트, iOS 상단 영역 후보 비교, 대용량 미디어 Range, 모바일 `text-size-adjust` | 아래 4개 질문에 답이 나오고 스펙에 반영됨 |
 | **P1 핵심** | 프로젝트 골격, `zip`·`filename`·`html-meta`·`text-extract`·`importer`, `storage`, `path`·`mime`·`range`·`inject`·`sw`, 서재(목록·가져오기·삭제), 리더(iframe·SW 준비 확인), agent 가드·핸드셰이크·진행률·이어 읽기, iOS 상단 영역, 앱 업데이트 정책, 호스팅 설정 | 성공 기준 1·2·5·6 충족 |
-| **P2 읽기 UI** | 오버레이·탭 판별·진행 바·진행선, 빠른 스크롤 핸들, 목차·페이지 패널, 이전/다음, 단축키, 글자 크기, 리소스 이슈 배지 | 성공 기준 3·4 충족 |
+| **P2 읽기 UI** | 오버레이·탭 판별·진행 바·진행선, 빠른 스크롤 핸들, 목차·페이지 패널, 이전/다음, 단축키, 확대, 리소스 이슈 배지 | 성공 기준 3·4 충족 |
 | **P3 편의** | 문서 전체 검색, 북마크, 재가져오기 교체, 문서명 지정·수정, 서재 검색·정렬 | §7.1–7.3, §7.6–7.7 동작 |
 | **P4 연동** | `file_handlers`·`launchQueue`, `share_target` | §7.5 동작 |
 
-**P0 스파이크가 답해야 할 질문**
-1. 루트 절대경로 네비게이션 302 리다이렉트와 서브리소스 매핑이 Chromium·WebKit·iOS 실기기에서 모두 동작하는가?
-2. iOS 26 홈 화면 앱에서 상태바 스타일 후보 (a)/(b) 중 어느 쪽이 문서 배경과 자연스럽게 이어지는가? Safari 탭에서 배경색 동기화가 효과가 있는가?
-3. iOS에서 Cache Storage의 300MB 이상 단일 Response로 Range 재생·탐색이 메모리 문제 없이 되는가? 안 되면 청크 저장으로 바꾼다.
-4. 모바일 `text-size-adjust`가 iOS·Android에서 글자만 키우는가?
+**P1의 첫 검증 항목**: 구조 전체가 기대는 가정 — "SW가 iframe 안의 문서와 그 안의 페이지 이동을 제어하고, 루트 절대경로 네비게이션 302 리다이렉트와
+서브리소스 매핑이 동작한다" — 을 P1 초반에 최소 구현과 Playwright(Chromium·WebKit) 테스트로 먼저 확인한다. 실패하면 이후 작업을 멈추고 설계를 다시 검토한다.
