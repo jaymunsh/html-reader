@@ -96,3 +96,9 @@ export class ProgressTracker {
     if (failed) throw firstError;
   }
 }
+
+/** "2 / 5쪽 · 62%"; a current path outside the list shows "–" for the index. */
+export function formatPageInfo(pages: string[], current: string, bookPct: number): string {
+  const i = pages.indexOf(current);
+  return `${i < 0 ? '–' : i + 1} / ${pages.length}쪽 · ${Math.floor(bookPct)}%`;
+}

@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getBook, getBookFiles, getProgress, setSetting, updateBook, type Book } from '../../lib/storage';
-  import { ProgressTracker } from '../../lib/progress';
+  import { getBook, getBookFiles, getProgress, getSetting, setSetting, updateBook, type Book } from '../../lib/storage';
+  import { ProgressTracker, bookProgress, formatPageInfo } from '../../lib/progress';
+  import { orderedPages } from '../../lib/file-tree';
+  import ProgressLine from './ProgressLine.svelte';
   import type { Restore } from '../../lib/protocol';
   import { ensureController, tellSw } from '../sw-client';
   import Overlay from './Overlay.svelte';
@@ -18,6 +20,12 @@
   let iframe = $state<HTMLIFrameElement>();
   let title = $state('');
   let overlayOpen = $state(false);
+  let curPct = $state(0);
+  let bookPct = $state(0);
+  let pages = $state<string[]>([]);
+  let showLine = $state(true);
+  const pageInfo = $derived(formatPageInfo(pages, path, bookPct));
+  const refreshBook = () => { if (book && tracker) bookPct = bookProgress(book.pagePaths, tracker.all()).pct; };
 
   export const OVERLAY_HIDE_MS = 3000;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
@@ -47,6 +55,7 @@
   const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
 
   onMount(() => {
+    void getSetting('progressLine').then((v) => { showLine = v; }).catch(() => {});
     void open();
     window.addEventListener('pagehide', flush);
     document.addEventListener('visibilitychange', onVisibility);
@@ -68,10 +77,12 @@
     if (gone) return;
     if (!b) { notice = 'missing'; return; }
     book = b;
+    pages = orderedPages(b.pagePaths);
     const files = await getBookFiles(bookId);
     const progress = await getProgress(bookId);
     if (gone) return;
     tracker = new ProgressTracker(bookId, progress);
+    refreshBook();
     const known = new Set(files?.paths ?? b.pagePaths);
     const wanted = openPath || b.lastPath;
     const start = wanted && known.has(wanted) ? wanted : b.entryPath;
@@ -84,11 +95,17 @@
       onState: (s) => { agent = s; },
       onPage: (p, t) => {
         path = p;
+        curPct = 0; // never show the previous page's position
+        refreshBook();
         title = t ?? book?.title ?? '';
         firstPath = null;
         void updateBook(bookId, { lastPath: p, lastOpenedAt: Date.now() }).catch(() => {});
       },
-      onScroll: (pct, ratio) => { tracker?.update(path, pct, ratio); },
+      onScroll: (pct, ratio) => {
+        tracker?.update(path, pct, ratio);
+        if (Number.isFinite(pct)) curPct = Math.min(100, Math.max(0, pct));
+        refreshBook();
+      },
       onTap,
       onKey: () => {},
       onExternal: (url) => { window.open(url, '_blank', 'noopener'); },
@@ -128,7 +145,8 @@
 <div class="reader" data-testid="reader" data-book-id={bookId} data-path={path} data-agent={agent} data-overlay={layout.desktop || overlayOpen ? 'open' : 'closed'}
   hidden={notice !== 'none'}>
   <iframe bind:this={iframe} data-testid="reader-frame" title="문서"></iframe>
-  <div role="presentation" onpointerdown={pokeOverlay}><Overlay open={overlayOpen} {title} onback={back} /></div>
+  <div role="presentation" onpointerdown={pokeOverlay}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back} /></div>
+  {#if showLine}<ProgressLine pct={curPct} hidden={overlayOpen && !layout.desktop} />{/if}
 </div>
 
 <style>
