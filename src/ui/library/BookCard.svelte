@@ -35,13 +35,13 @@
 
 <style>
   .card { position: relative; display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 10px 0;
-    background: var(--surface, #fff); border-radius: 22px; cursor: pointer; min-height: 44px;
-    box-shadow: 0 1px 2px rgba(21,24,30,.06), 0 6px 18px rgba(21,24,30,.05); }
-  .ring { flex: none; min-width: 48px; text-align: center; font-weight: 600; color: var(--accent, #2F6FEB); }
+    background: var(--surface); border-radius: var(--r-card); cursor: pointer; min-height: 44px;
+    box-shadow: var(--shadow-card); }
+  .ring { flex: none; min-width: 48px; text-align: center; font-weight: 600; color: var(--accent); }
   .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .meta { font-size: 13px; color: var(--text-3, #5B6270); }
+  .meta { font-size: 13px; color: var(--text-3); }
   .menu-btn { flex: none; min-width: 44px; min-height: 44px; border: 0; background: none; font-size: 20px; color: inherit; }
-  .menu-item { position: absolute; right: 12px; top: 56px; z-index: 5; min-height: 44px; padding: 0 20px; border: 1px solid var(--hairline, rgba(21,24,30,.08));
-    border-radius: 12px; background: var(--surface, #fff); color: #C0392B; font: inherit; }
+  .menu-item { position: absolute; right: 12px; top: 56px; z-index: 5; min-height: 44px; padding: 0 20px; border: 1px solid var(--hairline);
+    border-radius: var(--r-control); background: var(--surface); color: #C0392B; font: inherit; }
 </style>

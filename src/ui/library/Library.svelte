@@ -143,10 +143,10 @@
 {/if}
 
 <style>
-  main { min-height: 100vh; padding: 16px; box-sizing: border-box; }
-  main.dragging { outline: 2px dashed var(--accent, #2F6FEB); outline-offset: -8px; background: var(--accent-soft, #EAF0FD); }
+  main { min-height: 100vh; padding: calc(16px + var(--sat)) 16px 16px; box-sizing: border-box; }
+  main.dragging { outline: 2px dashed var(--accent); outline-offset: -8px; background: var(--accent-soft); }
   .dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(90vw, 360px);
-    padding: 20px; border-radius: 22px; background: var(--surface, #fff); }
-  .scrim { position: fixed; inset: 0; z-index: 19; background: var(--scrim, rgba(21,24,30,.38)); }
-  .dialog button { min-height: 44px; border-radius: 12px; margin-right: 8px; }
+    padding: 20px; border-radius: var(--r-sheet); background: var(--surface); }
+  .scrim { position: fixed; inset: 0; z-index: 19; background: var(--scrim); }
+  .dialog button { min-height: 44px; border-radius: var(--r-control); margin-right: 8px; }
 </style>

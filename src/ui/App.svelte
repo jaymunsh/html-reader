@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { cleanupOrphans } from '../lib/storage';
   import Library from './library/Library.svelte';
+  import { applyTheme, resolveTheme, setChromeColor } from './chrome';
   import Reader from './reader/Reader.svelte';
 
   type Screen = { name: 'library' } | { name: 'reader'; id: string; path: string | null };
@@ -14,7 +15,15 @@
 
   let screen = $state<Screen>(initial());
 
-  $effect(() => { document.documentElement.dataset.screen = screen.name; });
+  $effect(() => { document.documentElement.dataset.screen = screen.name; setChromeColor(screen.name); });
+
+  // P1: theme follows the system only.
+  onMount(() => {
+    const mq = matchMedia('(prefers-color-scheme: dark)');
+    const on = () => { applyTheme(resolveTheme('system', mq.matches)); setChromeColor(screen.name); };
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  });
 
   // Orphan cleanup once the first screen is up (skips itself while an import holds the lock).
   onMount(() => {
@@ -35,3 +44,10 @@
 {:else}
   <Library onopen={(id) => (screen = { name: 'reader', id, path: null })} />
 {/if}
+
+<div class="top-inset" data-testid="top-inset" class:reader={screen.name === 'reader'}></div>
+
+<style>
+  .top-inset { position: fixed; top: 0; left: 0; right: 0; height: var(--sat); background: var(--bg-app); z-index: 5; }
+  .top-inset.reader { background: var(--bg-reader); }
+</style>

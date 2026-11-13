@@ -108,8 +108,8 @@
 </div>
 
 <style>
-  .reader { position: fixed; inset: 0; background: #fff; }
+  .reader { position: fixed; inset: 0; background: var(--bg-reader); }
   .reader[hidden] { display: none; }
-  iframe { border: 0; width: 100%; height: 100%; display: block; }
+  iframe { position: fixed; top: var(--sat); left: 0; right: 0; bottom: 0; width: 100%; height: calc(100% - var(--sat)); border: 0; display: block; }
   .back { position: fixed; left: max(8px, env(safe-area-inset-left)); top: max(8px, env(safe-area-inset-top)); z-index: 10; }
 </style>
