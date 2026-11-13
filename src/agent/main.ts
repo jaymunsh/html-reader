@@ -1,7 +1,7 @@
 import { installGuards } from './guards';
 import { installLinkHandling } from './links';
 import { applyRestore, whenStable } from './restore';
-import { findScroller, metrics, watchScroller } from './scroller';
+import { findScroller, metrics, scrollToRatio, watchScroller } from './scroller';
 import { installTap } from './tap';
 import { parseShellMessage, wrap, type AgentMsg } from '../lib/protocol';
 
@@ -55,7 +55,9 @@ function start(): void {
   addEventListener('message', (e) => {
     if (e.source !== parent || e.origin !== location.origin) return;
     const p = parseShellMessage(e.data);
-    if (!p.ok || p.msg.type !== 'init') return;
+    if (!p.ok) return;
+    if (p.msg.type === 'scroll-to') { scrollToRatio(el, p.msg.ratio); return; }
+    if (p.msg.type !== 'init') return;
     const { textScale, restore } = p.msg;
     if (textScale !== currentScale) {
       currentScale = textScale;

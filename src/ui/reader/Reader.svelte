@@ -2,10 +2,11 @@
   import { onMount } from 'svelte';
   import { getBook, getBookFiles, getProgress, getSetting, setSetting, updateBook, type Book } from '../../lib/storage';
   import { ProgressTracker, bookProgress, formatPageInfo } from '../../lib/progress';
-  import { orderedPages } from '../../lib/file-tree';
+  import { neighbor, orderedPages } from '../../lib/file-tree';
   import ProgressLine from './ProgressLine.svelte';
   import type { Restore } from '../../lib/protocol';
   import { ensureController, tellSw } from '../sw-client';
+  import Icon from '../icons/Icon.svelte';
   import Overlay from './Overlay.svelte';
   import RibbonTab from './RibbonTab.svelte';
   import HintToast from './HintToast.svelte';
@@ -129,6 +130,10 @@
     session.navigate(start);
   }
 
+  const go = (dir: -1 | 1) => { const n = neighbor(pages, path, dir); if (n) session?.navigate(n); };
+  const prevPath = $derived(neighbor(pages, path, -1));
+  const nextPath = $derived(neighbor(pages, path, 1));
+
   async function back() {
     try { await tracker?.flush(); } catch { /* best effort */ }
     await setSetting('activeBookId', null).catch(() => {});
@@ -152,7 +157,16 @@
 <div class="reader" data-testid="reader" data-book-id={bookId} data-path={path} data-agent={agent} data-overlay={layout.desktop || overlayOpen ? 'open' : 'closed'}
   hidden={notice !== 'none'}>
   <iframe bind:this={iframe} data-testid="reader-frame" title="문서"></iframe>
-  <div role="presentation" onpointerdown={pokeOverlay}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back} /></div>
+  <div role="presentation" onpointerdown={pokeOverlay}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back}>
+    {#snippet bottom()}
+      <div class="nav">
+        <button type="button" data-testid="btn-top" aria-label="맨 위" disabled={agent === 'limited'} onclick={() => session?.post({ type: 'scroll-to', ratio: 0 })}><Icon name="to-top" /></button>
+        <button type="button" data-testid="btn-prev" aria-label="이전 쪽" disabled={!prevPath} onclick={() => go(-1)}><Icon name="prev" /></button>
+        <button type="button" data-testid="btn-next" aria-label="다음 쪽" disabled={!nextPath} onclick={() => go(1)}><Icon name="next" /></button>
+        <button type="button" data-testid="btn-bottom" aria-label="맨 아래" disabled={agent === 'limited'} onclick={() => session?.post({ type: 'scroll-to', ratio: 1 })}><Icon name="to-bottom" /></button>
+      </div>
+    {/snippet}
+  </Overlay></div>
   {#if !layout.desktop && !overlayOpen}<RibbonTab onopen={openOverlay} />{/if}
   {#if hint && !layout.desktop}<HintToast ondismiss={dismissHint} />{/if}
   {#if showLine}<ProgressLine pct={curPct} hidden={overlayOpen && !layout.desktop} />{/if}
@@ -161,5 +175,8 @@
 <style>
   .reader { position: fixed; inset: 0; background: var(--bg-reader); }
   .reader[hidden] { display: none; }
+  .nav { display: flex; justify-content: space-around; align-items: center; min-height: 56px; }
+  .nav button { background: none; border: 0; color: var(--text); width: 44px; height: 44px; display: grid; place-items: center; }
+  .nav button:disabled { opacity: .35; }
   iframe { position: fixed; top: var(--sat); left: 0; right: 0; bottom: 0; width: 100%; height: calc(100% - var(--sat)); border: 0; display: block; }
 </style>
