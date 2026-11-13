@@ -89,7 +89,17 @@ test('cleanupOrphans는 모든 저장소의 고아 레코드를 지우고 살아
   });
   await seed('aaaaaaaaaaaa');
   await seed('zzzzzzzzzzzz');
+  await new Promise<void>((resolve, reject) => {   // bookmark-only orphan: no rows in any other store
+    const tx = db.transaction('bookmarks', 'readwrite');
+    tx.objectStore('bookmarks').put({ id: 'bm-orphan', bookId: 'yyyyyyyyyyyy', path: 'p', scrollRatio: 0.1, label: '', createdAt: 1 });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
   await S.cleanupOrphans();
+  expect(await new Promise((resolve) => {
+    const r = db.transaction('bookmarks').objectStore('bookmarks').index('bookId').count('yyyyyyyyyyyy');
+    r.onsuccess = () => resolve(r.result);
+  })).toBe(0);
   const count = (store: string, id: string) => new Promise<number>((resolve) => {
     const s = db.transaction(store).objectStore(store);
     const r = store === 'bookFiles' ? s.count(id) : s.index('bookId').count(id);
