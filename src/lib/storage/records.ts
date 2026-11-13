@@ -45,3 +45,8 @@ export async function getSetting<K extends keyof Settings>(key: K): Promise<Sett
 export async function setSetting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<void> {
   await withTx('settings', 'readwrite', (tx) => { tx.objectStore('settings').put(value, key); });
 }
+
+export async function listAllIssues(): Promise<Issue[]> {
+  const db = await openDb();
+  return req(db.transaction('issues').objectStore('issues').getAll());
+}

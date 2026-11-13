@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    deleteBook, getAllProgress, getSetting, listBooks, setSetting, type Book, type PageProgress,
+    deleteBook, getAllProgress, getSetting, listAllIssues, listBooks, setSetting, type Book, type Issue, type PageProgress,
   } from '../../lib/storage';
   import { bookProgress } from '../../lib/progress';
   import { needsIosTabNotice, isStandalone } from '../../lib/platform';
@@ -10,6 +10,7 @@
   import ImportFlow from './ImportFlow.svelte';
 
   let books = $state<Book[]>([]);
+  let issues = $state(new Map<string, Issue[]>());
   let progress = $state(new Map<string, Map<string, PageProgress>>());
   let { onopen, onsettings, updateReady = false, onapply }: { onopen: (id: string) => void; onsettings: () => void; updateReady?: boolean; onapply: () => void } = $props();
   let input: HTMLInputElement;
@@ -30,7 +31,10 @@
   function reply(ok: boolean) { dlg = null; answer?.(ok); answer = null; }
 
   async function refresh() {
-    const [all, prog] = await Promise.all([listBooks(), getAllProgress()]);
+    const [all, prog, iss] = await Promise.all([listBooks(), getAllProgress(), listAllIssues().catch(() => [])]);
+    const im = new Map<string, Issue[]>();
+    for (const i of iss) (im.get(i.bookId) ?? im.set(i.bookId, []).get(i.bookId)!).push(i);
+    issues = im;
     books = all.sort((a, b) => (b.lastOpenedAt || b.importedAt) - (a.lastOpenedAt || a.importedAt));
     const m = new Map<string, Map<string, PageProgress>>();
     for (const p of prog) (m.get(p.bookId) ?? m.set(p.bookId, new Map()).get(p.bookId)!).set(p.path, p);
@@ -126,7 +130,8 @@
   <ImportFlow bind:this={flow} bind:busy={importing} onimported={refresh} />
   {#each books as book (book.id)}
     {@const bp = bookProgress(book.pagePaths, progress.get(book.id) ?? new Map())}
-    <BookCard {book} pct={bp.pct} readCount={bp.readCount} onopen={open} ondelete={(b) => void ask({ del: b })} />
+    {@const bi = issues.get(book.id) ?? []}
+    <BookCard {book} pct={bp.pct} readCount={bp.readCount} missing={bi.filter((i) => i.kind !== 'external').length} online={bi.some((i) => i.kind === 'external')} onopen={open} ondelete={(b) => void ask({ del: b })} />
   {/each}
 </main>
 
