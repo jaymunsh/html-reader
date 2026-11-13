@@ -18,7 +18,13 @@
   type Dlg = 'ios' | 'temp' | 'safety' | { del: Book };
   let dlg = $state<Dlg | null>(null);
   let answer: ((ok: boolean) => void) | null = null;
-  const ask = (d: Dlg) => new Promise<boolean>((res) => { dlg = d; answer = res; });
+  // One dialog at a time: later asks wait for the open one to be answered.
+  let dlgQ: Promise<unknown> = Promise.resolve();
+  const ask = (d: Dlg) => {
+    const p = dlgQ.then(() => new Promise<boolean>((res) => { dlg = d; answer = res; }));
+    dlgQ = p.then(() => {}, () => {});
+    return p;
+  };
   function reply(ok: boolean) { dlg = null; answer?.(ok); answer = null; }
 
   async function refresh() {
@@ -28,7 +34,22 @@
     for (const p of prog) (m.get(p.bookId) ?? m.set(p.bookId, new Map()).get(p.bookId)!).set(p.path, p);
     progress = m;
   }
-  onMount(refresh);
+  onMount(() => {
+    void refresh();
+    // A file dropped anywhere must never make the browser navigate to it.
+    const stop = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); };
+    const end = () => { dragging = false; };
+    window.addEventListener('dragover', stop);
+    window.addEventListener('drop', stop);
+    window.addEventListener('drop', end);
+    window.addEventListener('dragend', end);
+    return () => {
+      window.removeEventListener('dragover', stop);
+      window.removeEventListener('drop', stop);
+      window.removeEventListener('drop', end);
+      window.removeEventListener('dragend', end);
+    };
+  });
 
   // Entry gates (iOS tab notice, safety notice) run once per pick/drop; files then import one at a time, in order.
   const queue: File[] = [];
@@ -41,7 +62,14 @@
     } finally { draining = false; }
   }
 
-  async function enter(files: File[]) {
+  // Batches are gated and imported strictly in arrival order.
+  let batches: Promise<void> = Promise.resolve();
+  function enter(files: File[]) {
+    batches = batches.then(() => gateAndImport(files)).catch(() => {});
+    return batches;
+  }
+
+  async function gateAndImport(files: File[]) {
     if (!files.length) return;
     if (needsIosTabNotice(navigator.userAgent, navigator.maxTouchPoints, isStandalone())) {
       if (!(await ask('ios'))) return;
@@ -76,7 +104,7 @@
   }
 </script>
 
-<main data-testid="library" class:dragging {ondragover} {ondrop} ondragleave={(e) => { if (e.target === e.currentTarget) dragging = false; }}>
+<main data-testid="library" class:dragging {ondragover} {ondrop} ondragleave={(e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) dragging = false; }}>
   <h1>서재</h1>
   <button type="button" data-testid="import-button" onclick={() => input.click()}>가져오기</button>
   <input bind:this={input} type="file" data-testid="import-input" hidden multiple
@@ -88,6 +116,7 @@
   {/each}
 </main>
 
+{#if dlg}<div class="scrim"></div>{/if}
 {#if dlg === 'ios'}
   <div class="dialog" role="dialog" aria-modal="true" data-testid="ios-notice">
     <h2>홈 화면에 추가해서 쓰세요</h2>
@@ -117,6 +146,7 @@
   main { min-height: 100vh; padding: 16px; box-sizing: border-box; }
   main.dragging { outline: 2px dashed var(--accent, #2F6FEB); outline-offset: -8px; background: var(--accent-soft, #EAF0FD); }
   .dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(90vw, 360px);
-    padding: 20px; border-radius: 22px; background: var(--surface, #fff); box-shadow: 0 0 0 100vmax var(--scrim, rgba(21,24,30,.38)); }
+    padding: 20px; border-radius: 22px; background: var(--surface, #fff); }
+  .scrim { position: fixed; inset: 0; z-index: 19; background: var(--scrim, rgba(21,24,30,.38)); }
   .dialog button { min-height: 44px; border-radius: 12px; margin-right: 8px; }
 </style>

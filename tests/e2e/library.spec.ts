@@ -97,3 +97,17 @@ test('가져오기가 진행 중이면 정리를 건너뛴다 (Review Focus 3)',
   });
   expect(r).toEqual({ first: true, kept: true, second: ['book-inprogress00-v1'] });
 });
+
+test('안내 대화상자가 열린 동안 고른 두 번째 파일도 순서대로 가져온다', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('import-input').setInputFiles(fixture('10-single.html'));
+  await passIosNotices(page);
+  await expect(page.getByTestId('safety-notice')).toBeVisible();
+  await page.getByTestId('import-input').setInputFiles(fixture('01-multipage.zip'));   // 대화상자 뒤에서 두 번째 선택
+  await page.getByTestId('safety-notice').getByTestId('confirm-ok').click();
+  await passIosNotices(page);                                                        // 두 번째 묶음의 iOS 안내 (iOS UA에서만)
+  await expect(page.getByTestId('book-card')).toHaveCount(2);
+  const books = (await idbAll(page, 'books')).sort((a, b) => a.importedAt - b.importedAt);
+  expect(books.map((b) => b.sourceName)).toEqual(['10-single', '01-multipage']);
+  await expect(page.getByTestId('safety-notice')).toHaveCount(0);
+});
