@@ -37,7 +37,9 @@ test('iframe에 포커스가 있어도 단축키가 동작한다', async ({ page
   const open = await page.getByTestId('panel').getAttribute('data-open');
   await page.keyboard.press('t');
   await expect(page.getByTestId('panel')).not.toHaveAttribute('data-open', open!);
-  await page.keyboard.press('Control+=');                                    // 수정자 키는 가로채지 않는다
+  await page.keyboard.press('Control+]');                                    // 수정자 키는 가로채지 않는다
+  await page.waitForTimeout(300);
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'index.html');
   await page.keyboard.press('Space');                                        // PC에서 Space는 오버레이 토글이 아니다
   await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'open');
 });
@@ -105,4 +107,17 @@ test('창을 768px 아래로 줄였다 늘려도 iframe이 다시 로드되지 �
   await page.getByTestId('ribbon-tab').click();                              // 시트의 holdOverlay가 풀려 있어 3초 뒤 숨는다
   await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'open');
   await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'closed', { timeout: 4500 });
+});
+
+test('키 반복(e.repeat)은 무시한다 (셸·iframe 모두)', async ({ page }) => {
+  await page.goto('/');
+  const id = await importFixture(page, '01-multipage.zip');
+  const f = await openBook(page, id);
+  const press = "dispatchEvent(new KeyboardEvent('keydown', { key: ']', repeat: true, bubbles: true }))";
+  await page.evaluate(press);
+  await f.evaluate(press);
+  await page.waitForTimeout(300);
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'index.html');
+  await f.evaluate("dispatchEvent(new KeyboardEvent('keydown', { key: ']', bubbles: true }))");   // 대조: 반복이 아니면 이동한다
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'noref.html');
 });

@@ -5,7 +5,7 @@ import { isEditableTarget } from '../lib/shortcuts';
 // Never calls preventDefault.
 export function installKeys(send: (m: AgentMsg) => void): void {
   window.addEventListener('keydown', (e) => {
-    if (e.defaultPrevented || e.isComposing || isEditableTarget(e.target as Element | null)) return;
+    if (e.defaultPrevented || e.isComposing || e.repeat || isEditableTarget(e.target as Element | null)) return;
     send({ type: 'key', key: e.key, mods: { ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey } });
   });
 }

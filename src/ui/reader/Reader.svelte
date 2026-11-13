@@ -205,7 +205,9 @@
     if (a) actions[a]?.();
   }
   function onWindowKey(e: KeyboardEvent) {
-    if (e.defaultPrevented || e.isComposing || isEditableTarget(e.target as Element | null) || notice !== 'none') return;
+    if (e.defaultPrevented || e.isComposing || e.repeat || isEditableTarget(e.target as Element | null) || notice !== 'none') return;
+    // Space on a focused control belongs to that control (its keyup activation), not to the overlay toggle.
+    if (e.key === ' ' && (e.target as Element | null)?.closest?.('button, a[href], [role=button], [role=tab], summary')) return;
     onKey(e.key, { ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey });
   }
 
