@@ -6,13 +6,14 @@
   const PANEL_MIN = 240;
   const PANEL_MAX = 480;
 
-  let { open, tab = $bindable('files'), onClose, width = $bindable(320), onWidthCommit, onEscape, blocked = false, files, bookmarks }: {
+  let { open, tab = $bindable('files'), onClose, width = $bindable(320), max = PANEL_MAX, onWidthCommit, onEscape, blocked = false, files, bookmarks }: {
     open: boolean; tab: 'files' | 'bookmarks'; onClose(): void;
-    width?: number; onWidthCommit?(w: number): void; onEscape?(): void; blocked?: boolean;
+    width?: number; max?: number; onWidthCommit?(w: number): void; onEscape?(): void; blocked?: boolean;
     files: Snippet; bookmarks: Snippet;
   } = $props();
 
   let el = $state<HTMLElement>();
+  const applied = $derived(Math.min(width, max)); // `width` is the preference; a narrow window caps what is shown
   // Opening the sheet moves focus inside it: the current file row on the files tab, otherwise the active tab.
   $effect(() => {
     if (!open || layout.desktop) return;
@@ -35,10 +36,10 @@
   function down(e: PointerEvent) {
     if (e.button !== 0) return;
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
-    dragging = true; grabX = e.clientX; startW = width;
+    dragging = true; grabX = e.clientX; startW = applied;
   }
   function move(e: PointerEvent) {
-    if (dragging) width = Math.min(PANEL_MAX, Math.max(PANEL_MIN, Math.round(startW + grabX - e.clientX)));
+    if (dragging) width = Math.min(max, Math.max(PANEL_MIN, Math.round(startW + grabX - e.clientX)));
   }
   function up() { if (dragging) { dragging = false; onWidthCommit?.(width); } }
 </script>
@@ -47,8 +48,8 @@
   <div class="scrim" class:open role="presentation" onclick={onClose}></div>
 {/if}
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<aside bind:this={el} class="panel" class:dock={layout.desktop} class:open data-testid="panel" data-open={open} inert={!open || blocked}
-  aria-label="패널" style:width={layout.desktop ? `${width}px` : null} {onkeydown}>
+<aside bind:this={el} class="panel" class:dock={layout.desktop} class:open data-testid="panel" data-open={open} tabindex="-1" inert={!open || blocked}
+  aria-label="패널" style:width={layout.desktop ? `${applied}px` : null} {onkeydown}>
   {#if layout.desktop}
     <div class="resizer" data-testid="panel-resizer" role="separator" aria-orientation="vertical" aria-label="패널 폭"
       onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}></div>

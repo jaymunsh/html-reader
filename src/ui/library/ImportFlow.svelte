@@ -39,7 +39,9 @@
   onDestroy(() => choose(null));
 </script>
 
-{#if choices}
+<!-- The entry choice also waits behind a library dialog. `held` is read first: with `choices && !held`, Svelte 5.57
+     did not re-run this block when `held` alone turned false (the choice never appeared). -->
+{#if !held && choices}
   <Dialog title="시작 페이지 선택" oncancel={() => choose(null)}>
     <p>시작할 페이지를 선택하세요.</p>
     <div class="options">

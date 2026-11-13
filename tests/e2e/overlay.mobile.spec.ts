@@ -81,3 +81,17 @@ test('닫힌 오버레이는 문서 탭을 가로채지 않는다', async ({ pag
   const hit = await page.evaluate(() => document.elementFromPoint(30, 20)?.getAttribute('data-testid'));
   expect(hit).toBe('reader-frame');
 });
+
+test('키보드 포커스가 오버레이 안에 있는 동안에는 숨지 않는다', async ({ page, browserName }) => {
+  const f = await open9(page);
+  await f.locator('#plain').tap();
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'open');
+  await page.getByTestId('reader-back').focus();
+  await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');   // 키보드로 바 버튼에 들어간다 (WebKit의 Tab은 버튼을 건너뛴다)
+  await expect(page.getByTestId('btn-panel')).toBeFocused();
+  await page.waitForTimeout(3500);                                           // OVERLAY_HIDE_MS(3s) 넘게
+  expect(await state(page)).toBe('open');
+  await expect(page.getByTestId('btn-panel')).toBeFocused();
+  await page.getByTestId('btn-panel').evaluate((e: HTMLElement) => e.blur()); // 포커스가 나가면 다시 숨는다
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'closed', { timeout: 4000 });
+});

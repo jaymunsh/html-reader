@@ -44,7 +44,7 @@
 
   <section>
     <label class="row">
-      <span>리더 상단 진행 선</span>
+      <span>리더 하단 진행선</span>
       <input type="checkbox" data-testid="setting-progress-line" bind:checked={progressLine} onchange={toggleLine} />
     </label>
   </section>

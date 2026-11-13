@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     deleteBook, getAllProgress, getSetting, listAllIssues, listBooks, missingCount, setSetting, type Book, type Issue, type PageProgress,
   } from '../../lib/storage';
@@ -116,7 +116,14 @@
   async function confirmDelete() {
     const d = dlg;
     reply(true);
-    if (d && typeof d === 'object') { await deleteBook(d.del.id); await refresh(); }
+    if (!d || typeof d !== 'object') return;
+    const i = books.findIndex((b) => b.id === d.del.id);
+    await deleteBook(d.del.id); await refresh(); await tick();
+    // Focus the next card's menu, else the previous one's, else the import button (the deleted card's menu is gone).
+    const near = books[i] ?? books[i - 1];
+    const to = (near && document.querySelector<HTMLElement>(`[data-book-id="${near.id}"] [data-testid=book-menu]`))
+      || document.querySelector<HTMLElement>('[data-testid=import-button]');
+    to?.focus({ preventScroll: true });
   }
 </script>
 

@@ -49,7 +49,11 @@
   let panelTab = $state<'files' | 'bookmarks'>('files');
   let sheetOpen = $state(false);
   let dockOpen = $state(false);
-  let panelWidth = $state(320);
+  let panelWidth = $state(320); // the user's preference; the applied width is clamped to the window
+  let vw = $state(innerWidth);
+  // Leave the desktop top bar at least 460px beside the dock (its controls need ~391px plus badges).
+  const panelMax = $derived(Math.min(480, Math.max(240, vw - 460)));
+  const panelApplied = $derived(Math.min(panelWidth, panelMax));
   let panelReady = $state(false); // the panel renders once its saved state is loaded (no slide-in at boot)
   let btnPanel = $state<HTMLButtonElement>();
   const panelOpen = $derived(layout.desktop ? dockOpen : sheetOpen);
@@ -85,6 +89,15 @@
   function arm() {
     clearTimeout(hideTimer);
     if (overlayOpen && !holds.size) hideTimer = setTimeout(() => { overlayOpen = false; }, OVERLAY_HIDE_MS);
+  }
+  // A keyboard user inside the overlay keeps it up (pointer focus does not: a tap still auto-hides).
+  let overlayEl = $state<HTMLElement>();
+  let focusHold: (() => void) | null = null;
+  function onOverlayFocusIn(e: FocusEvent) {
+    if ((e.target as Element).matches?.(':focus-visible')) focusHold ??= holdOverlay('focus');
+  }
+  function onOverlayFocusOut(e: FocusEvent) {
+    if (!overlayEl?.contains(e.relatedTarget as Node | null)) { focusHold?.(); focusHold = null; }
   }
   /** Keep the overlay up while dragging / using a panel; call the returned function to release. */
   export function holdOverlay(reason: string): () => void {
@@ -136,7 +149,7 @@
       flush();
       session?.destroy();
       clearTimeout(hideTimer);
-      sheetHold?.(); issuesHold?.();
+      sheetHold?.(); issuesHold?.(); focusHold?.();
       clearTimeout(issueTimer);
     };
   });
@@ -238,6 +251,7 @@
     bottom: () => session?.post({ type: 'scroll-to', ratio: 1 }),
   };
   function onKey(key: string, mods: Mods) {
+    if (sheet) return; // nothing acts behind a modal sheet; the sheets handle their own Escape
     const a = shortcutFor(key, mods, { desktop: layout.desktop });
     if (a) actions[a]?.();
   }
@@ -256,7 +270,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onWindowKey} />
+<svelte:window onkeydown={onWindowKey} bind:innerWidth={vw} />
 
 {#if notice === 'unsupported'}
   <div role="alert" data-testid="unsupported-notice">
@@ -271,9 +285,9 @@
 {/if}
 
 <div class="reader" class:desk={layout.desktop} data-testid="reader" data-book-id={bookId} data-path={path} data-agent={agent} data-overlay={layout.desktop || overlayOpen ? 'open' : 'closed'}
-  hidden={notice !== 'none'} style:--panel-w={layout.desktop && dockOpen ? `${panelWidth}px` : '0px'}>
+  hidden={notice !== 'none'} style:--panel-w={layout.desktop && dockOpen ? `${panelApplied}px` : '0px'}>
   <iframe bind:this={iframe} data-testid="reader-frame" title="문서" inert={sheet}></iframe>
-  <div role="presentation" onpointerdown={pokeOverlay} inert={sheet}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back}>
+  <div role="presentation" bind:this={overlayEl} onpointerdown={pokeOverlay} onfocusin={onOverlayFocusIn} onfocusout={onOverlayFocusOut} inert={sheet}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back}>
     {#snippet topActions()}
       {#if nMissing}
         <button type="button" class="act badge warn" data-testid="issue-badge" aria-label={`누락 ${nMissing}`} bind:this={btnIssues} onclick={openIssues}><Icon name="warning" size={16} /><span class="full">누락{' '}</span>{nMissing}</button>
@@ -298,7 +312,7 @@
   </Overlay></div>
   <IssuesSheet open={issuesOpen} issues={missing} onClose={closeIssues} />
   {#if panelReady}
-    <Panel open={panelOpen} bind:tab={panelTab} onClose={closePanel} bind:width={panelWidth}
+    <Panel open={panelOpen} bind:tab={panelTab} onClose={closePanel} bind:width={panelWidth} max={panelMax}
       onWidthCommit={(w) => void setSetting('panelWidth', w).catch(() => {})} onEscape={() => iframe?.focus()} blocked={issuesOpen}>
       {#snippet files()}
         {#if pages.length}
@@ -336,7 +350,8 @@
   span.badge { flex: none; padding: 4px 8px; font-size: 12px; white-space: nowrap; border-radius: var(--r-chip); background: var(--info-bg); color: var(--info-fg); }
   span.badge { min-height: 44px; display: inline-flex; align-items: center; box-sizing: border-box; }
   .ico { display: none; }
-  @media (max-width: 359px) {
+  /* Compact badges by the bar's own width: narrow phones and the desktop bar beside a wide dock alike. */
+  @container topbar (max-width: 359px) {
     .full { display: none; }
     .ico { display: inline-flex; }
     span.badge { min-width: 44px; justify-content: center; }

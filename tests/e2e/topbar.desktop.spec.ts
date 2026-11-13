@@ -1,0 +1,45 @@
+import { expect, test, type Page } from '@playwright/test';
+import { backToLibrary, importFixture, openBook, settled } from './helpers';
+
+// Every top-bar control sits fully left of the docked panel and stays a ≥ 44px target.
+async function controlsClear(page: Page) {
+  await settled(page, 'panel');
+  const px = (await page.getByTestId('panel').boundingBox())!.x;
+  const boxes = await page.getByTestId('overlay-top').locator('button, [data-testid=limited-badge]').evaluateAll((els) =>
+    els.map((e) => { const r = e.getBoundingClientRect(); return { id: e.getAttribute('data-testid'), right: r.right, w: r.width, h: r.height }; }));
+  expect(boxes.map((b) => b.id)).toEqual(expect.arrayContaining(['reader-back', 'issue-badge', 'btn-prev', 'zoom-out', 'zoom-in', 'btn-next']));
+  for (const b of boxes) {
+    expect(b.right, `${b.id} right`).toBeLessThanOrEqual(px);
+    expect(Math.min(b.w, b.h), `${b.id} size`).toBeGreaterThanOrEqual(44);
+  }
+}
+
+test('좁은 PC 창: 상단 바 컨트롤이 도킹 패널 밑으로 들어가지 않는다 (800px, 누락 배지)', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  const id = await importFixture(page, '08-missing.zip');
+  await openBook(page, id);
+  await expect(page.getByTestId('overlay-top').getByTestId('issue-badge')).toBeVisible({ timeout: 5000 });
+  const panel = page.getByTestId('panel');
+  const r = (await page.getByTestId('panel-resizer').boundingBox())!;             // 선호 폭 480 저장
+  await page.mouse.move(r.x + 2, r.y + 200); await page.mouse.down(); await page.mouse.move(r.x - 500, r.y + 200); await page.mouse.up();
+  expect((await panel.boundingBox())!.width).toBe(480);
+
+  await page.setViewportSize({ width: 800, height: 700 });                        // 창 크기 변경: 적용 폭만 줄어든다
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBe(340);
+  await controlsClear(page);
+
+  await backToLibrary(page); await openBook(page, id);                            // 불러올 때도: 800px에선 접힌 채 시작 → 펼치기
+  await page.getByTestId('panel-toggle').click();
+  await expect(panel).toHaveAttribute('data-open', 'true');
+  await expect(page.getByTestId('overlay-top').getByTestId('issue-badge')).toBeVisible({ timeout: 5000 });
+  expect((await panel.boundingBox())!.width).toBe(340);
+  await controlsClear(page);
+  await expect(page.getByTestId('overlay-top').getByTestId('issue-badge')).toHaveAttribute('aria-label', /^누락 \d+$/);
+
+  await page.setViewportSize({ width: 768, height: 700 });                        // 경계 폭: 기본 패널(320)도 줄어든다
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBe(308);
+  await controlsClear(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBe(480);    // 선호 폭은 그대로
+});

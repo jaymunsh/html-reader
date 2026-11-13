@@ -30,7 +30,7 @@
   }
   .bar.closed { opacity: 0; pointer-events: none; }
   .top {
-    top: 0; right: var(--panel-w, 0px); display: flex; align-items: center; gap: 8px; min-height: 52px;
+    top: 0; right: var(--panel-w, 0px); display: flex; container: topbar / inline-size; align-items: center; gap: 8px; min-height: 52px;
     padding: var(--sat) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
     border-bottom: 1px solid var(--hairline); box-sizing: content-box;
   }
@@ -41,10 +41,11 @@
     border-top: 1px solid var(--hairline); box-sizing: content-box;
   }
   .bottom.closed { transform: translateY(100%); }
-  .back { background: none; border: 0; color: inherit; width: 44px; height: 44px; display: grid; place-items: center; }
+  .back { flex: none; background: none; border: 0; color: inherit; width: 44px; height: 44px; display: grid; place-items: center; }
   .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-  .page-info { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+  /* Too narrow: the title gives way first (basis 0), then the page info; the controls never shrink. */
+  .page-info { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--text-3); white-space: nowrap; }
   .pbar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; pointer-events: none; }
   .pbar i { display: block; width: 100%; height: 100%; background: var(--accent); transform-origin: left; }
-  .actions { display: flex; gap: 4px; }
+  .actions { display: flex; flex: none; gap: 4px; }
 </style>

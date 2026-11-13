@@ -157,3 +157,42 @@ test('시작 페이지를 고르는 동안에는 책이 열리지 않고, 고른
   await importFixture(page, '01-multipage.zip');
   await expect(page.getByTestId('book-card')).toHaveCount(3);
 });
+
+test('삭제 뒤 포커스: 다음 카드의 메뉴 → 없으면 이전 카드 → 카드가 없으면 가져오기 버튼', async ({ page }) => {
+  await page.goto('/');
+  const s = await importFixture(page, '10-single.html');
+  const m = await importFixture(page, '01-multipage.zip');
+  const x = await importFixture(page, '04-body-scroll.zip');                // 순서: x, m, s
+  const focused = () => page.evaluate(() => {
+    const a = document.activeElement;
+    return `${a?.closest('[data-book-id]')?.getAttribute('data-book-id') ?? ''}:${a?.getAttribute('data-testid')}`;
+  });
+  const del = async (id: string) => {
+    await page.locator(`[data-book-id="${id}"] [data-testid=book-menu]`).click();
+    await page.getByTestId('menu-delete').click();
+    await page.getByTestId('confirm-ok').click();
+    await expect(page.locator(`[data-testid=book-card][data-book-id="${id}"]`)).toHaveCount(0);
+  };
+  await del(m); await expect.poll(focused).toBe(`${s}:book-menu`);         // 다음 카드
+  await del(s); await expect.poll(focused).toBe(`${x}:book-menu`);         // 이전 카드
+  await del(x); await expect.poll(focused).toBe(':import-button');         // 남은 카드 없음
+});
+
+test('삭제 대화상자가 열린 동안 가져오기가 시작 페이지를 물으면, 그 선택은 대화상자가 닫힌 뒤에 뜬다', async ({ page }) => {
+  await page.goto('/');
+  const first = await importFixture(page, '10-single.html');
+  await page.locator(`[data-book-id="${first}"] [data-testid=book-menu]`).click();
+  await page.getByTestId('menu-delete').click();
+  await page.getByTestId('import-input').setInputFiles(fixture('pick-entry.zip'));
+  await page.waitForTimeout(1500);                                         // 그 사이 가져오기가 시작 페이지 선택에 이른다
+  const dialogs = page.locator('[role=dialog]');
+  await expect(dialogs).toHaveCount(1);
+  await expect(dialogs).toContainText('문서 삭제');
+  await page.keyboard.press('Escape');                                     // 보이는 대화상자(삭제)가 닫힌다
+  await passIosNotices(page);
+  await expect(page.getByTestId('entry-choice').first()).toBeVisible();
+  await expect(dialogs).toHaveCount(1);
+  await expect(page.getByTestId('book-card')).toHaveCount(1);              // 삭제는 취소됐다
+  await page.keyboard.press('Escape');
+  await expect(dialogs).toHaveCount(0);
+});
