@@ -6,11 +6,12 @@
   import { bookProgress } from '../../lib/progress';
   import { needsIosTabNotice, isStandalone } from '../../lib/platform';
   import BookCard from './BookCard.svelte';
+  import Icon from '../icons/Icon.svelte';
   import ImportFlow from './ImportFlow.svelte';
 
   let books = $state<Book[]>([]);
   let progress = $state(new Map<string, Map<string, PageProgress>>());
-  let { onopen, updateReady = false, onapply }: { onopen: (id: string) => void; updateReady?: boolean; onapply: () => void } = $props();
+  let { onopen, onsettings, updateReady = false, onapply }: { onopen: (id: string) => void; onsettings: () => void; updateReady?: boolean; onapply: () => void } = $props();
   let input: HTMLInputElement;
   let flow: ImportFlow;
   let dragging = $state(false);
@@ -115,7 +116,10 @@
       <button type="button" data-testid="update-apply" onclick={onapply}>적용</button>
     </div>
   {/if}
-  <h1>서재</h1>
+  <div class="title">
+    <h1>서재</h1>
+    <button type="button" class="icon" data-testid="settings-button" aria-label="설정" onclick={onsettings}><Icon name="settings" /></button>
+  </div>
   <button type="button" data-testid="import-button" onclick={() => input.click()}>가져오기</button>
   <input bind:this={input} type="file" data-testid="import-input" hidden multiple
     accept=".zip,.html,.htm,application/zip,text/html" {onchange} />
@@ -157,6 +161,9 @@
   main.dragging { outline: 2px dashed var(--accent); outline-offset: -8px; background: var(--accent-soft); }
   .dialog { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20; width: min(90vw, 360px);
     padding: 20px; border-radius: var(--r-sheet); background: var(--surface); }
+.title { display: flex; align-items: center; justify-content: space-between; }
+  .title h1 { margin: 0; }
+  .icon { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; color: var(--text); border-radius: var(--r-control); }
   .update { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; margin-bottom: 12px;
     border-radius: var(--r-control); background: var(--info-bg); color: var(--info-fg); }
   .update button { min-height: 44px; padding: 0 16px; border-radius: var(--r-control); }

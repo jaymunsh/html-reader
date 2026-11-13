@@ -2,11 +2,12 @@
   import { onMount } from 'svelte';
   import { cleanupOrphans, importRunning } from '../lib/storage';
   import Library from './library/Library.svelte';
-  import { applyTheme, resolveTheme, setChromeColor } from './chrome';
+  import { setScreen } from './chrome';
+  import Settings from './settings/Settings.svelte';
   import { applyUpdate, hasWaitingUpdate, watchForUpdate } from './sw-client';
   import Reader from './reader/Reader.svelte';
 
-  type Screen = { name: 'library' } | { name: 'reader'; id: string; path: string | null };
+  type Screen = { name: 'library' } | { name: 'settings' } | { name: 'reader'; id: string; path: string | null };
 
   function initial(): Screen {
     const q = new URLSearchParams(location.search);
@@ -27,15 +28,7 @@
     if (hasWaitingUpdate() || wanted) void importRunning().then((busy) => { if (!busy) applyUpdate(); });
   }
 
-  $effect(() => { document.documentElement.dataset.screen = screen.name; setChromeColor(screen.name); });
-
-  // P1: theme follows the system only.
-  onMount(() => {
-    const mq = matchMedia('(prefers-color-scheme: dark)');
-    const on = () => { applyTheme(resolveTheme('system', mq.matches)); setChromeColor(screen.name); };
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  });
+  $effect(() => { document.documentElement.dataset.screen = screen.name; setScreen(screen.name); });
 
   // Orphan cleanup once the first screen is up (skips itself while an import holds the lock).
   onMount(() => {
@@ -53,8 +46,10 @@
   {#key screen.id}
     <Reader bookId={screen.id} openPath={screen.path} onopened={clean} onexit={toLibrary} />
   {/key}
+{:else if screen.name === 'settings'}
+  <Settings onback={() => (screen = { name: 'library' })} />
 {:else}
-  <Library {updateReady} onapply={applyUpdate} onopen={(id) => (screen = { name: 'reader', id, path: null })} />
+  <Library {updateReady} onapply={applyUpdate} onsettings={() => (screen = { name: 'settings' })} onopen={(id) => (screen = { name: 'reader', id, path: null })} />
 {/if}
 
 <div class="top-inset" data-testid="top-inset" class:reader={screen.name === 'reader'}></div>
