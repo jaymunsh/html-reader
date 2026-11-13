@@ -37,10 +37,17 @@ export function whenStable(cb: () => void): void {
 
 const INPUTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
 
+// Calls cb once on the first user input (spec §6.7-3: manual scrolling stops re-applying). Returns an unsubscribe.
+export function onUserInput(cb: () => void): () => void {
+  const off = () => { for (const t of INPUTS) removeEventListener(t, h, true); };
+  const h = () => { off(); cb(); };
+  for (const t of INPUTS) addEventListener(t, h, { capture: true, passive: true });
+  return off;
+}
+
 export function applyRestore(getScroller: () => Element, ratio: number): void {
   const apply = () => scrollToRatio(getScroller(), ratio);
   apply();
-  const abort = () => stop();
-  const stop = settle(apply, () => { for (const t of INPUTS) removeEventListener(t, abort, true); });
-  for (const t of INPUTS) addEventListener(t, abort, { capture: true, passive: true });
+  const stop = settle(apply, () => off());
+  const off = onUserInput(stop);
 }

@@ -1,6 +1,6 @@
 import { installGuards } from './guards';
 import { installLinkHandling } from './links';
-import { applyRestore, whenStable } from './restore';
+import { applyRestore, onUserInput, whenStable } from './restore';
 import { findScroller, metrics, scrollToRatio, watchScroller } from './scroller';
 import { installTap } from './tap';
 import { installKeys } from './keys';
@@ -79,7 +79,11 @@ function start(): void {
     if (r !== undefined) applyRestore(() => el, r);
     else if (restore && 'find' in restore) {
       const { query, snippet } = restore.find;
-      if (!findAndReveal(query, snippet)) whenStable(() => findAndReveal(query, snippet));
+      if (!findAndReveal(query, snippet)) {
+        let touched = false;
+        const off = onUserInput(() => { touched = true; });
+        whenStable(() => { off(); if (!touched) findAndReveal(query, snippet); });
+      }
     }
   });
 

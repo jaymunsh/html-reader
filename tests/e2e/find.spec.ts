@@ -112,3 +112,57 @@ test('init.restore.find: 찾으면 그 위치로, 없으면 현재 위치 그대
   expect(await scrollTop(f)).toBe(mid);
   expect(await errs(f)).toEqual([]);
 });
+
+// Posts init.restore.find and, in the same tick, schedules a post-load insertion of the target text inside the frame.
+const restoreLate = (page: Page, opts: { wheel: boolean }) => page.evaluate((o) => {
+  const w = (document.querySelector('[data-testid=reader-frame]') as HTMLIFrameElement).contentWindow as Window & typeof globalThis;
+  w.postMessage({ app: 'html-reader', protocolVersion: 1, type: 'init', textScale: 1, restore: { find: { query: '로드 뒤 생긴 문장', snippet: '로드 뒤 생긴 문장' } } }, location.origin);
+  w.setTimeout(() => w.document.body.insertAdjacentHTML('beforeend', '<p id="later">로드 뒤 생긴 문장</p>'), 200);
+  if (o.wheel) w.setTimeout(() => w.document.body.dispatchEvent(new w.WheelEvent('wheel', { bubbles: true, deltaY: 10 })), 50);
+}, opts);
+
+test('init.restore.find: 로드 뒤 생긴 문장은 whenStable 재시도로 찾는다', async ({ page }) => {
+  const f = await openOther(page);
+  await restoreLate(page, { wheel: false });
+  await expect.poll(() => inView(f, '#later')).toBe(true);
+  expect(await errs(f)).toEqual([]);
+});
+
+test('init.restore.find: 재시도 전에 사용자가 스크롤하면 재시도하지 않는다 (§6.7-3)', async ({ page }) => {
+  const f = await openOther(page);
+  await restoreLate(page, { wheel: true });
+  await expect(f.locator('#later')).toHaveCount(1);
+  await page.waitForTimeout(1500); // past the whenStable retry
+  expect(await scrollTop(f)).toBe(0);
+  expect(await errs(f)).toEqual([]);
+});
+
+test('숨은 일치(닫힌 details, display:none)는 건너뛰고, 숨은 것뿐이면 무시한다', async ({ page }) => {
+  const f = await openOther(page);
+  await f.evaluate(() => {
+    document.getElementById('p20')!.insertAdjacentHTML('afterend', '<details><summary>열기</summary><p id="hid1">숨은 수달 문장</p></details>');
+    document.getElementById('p30')!.insertAdjacentHTML('afterend', '<p id="hid2" style="display:none">숨은 수달 문장</p>');
+    document.getElementById('p150')!.insertAdjacentHTML('afterend', '<p id="vis">숨은 수달 문장</p>');
+  });
+  await send(page, { type: 'find', query: '숨은 수달', snippet: '숨은 수달 문장' });
+  await expect.poll(() => inView(f, '#vis')).toBe(true);
+
+  await f.evaluate(() => document.getElementById('vis')!.remove());
+  await scrollFrameTo(f, 0.3);
+  const at = await scrollTop(f);
+  if (await supported(f)) await expect.poll(() => highlighted(f), { timeout: 4000 }).toBe(false);
+  await send(page, { type: 'find', query: '숨은 수달', snippet: '숨은 수달 문장' });
+  await page.waitForTimeout(300);
+  expect(await scrollTop(f)).toBe(at);
+  if (await supported(f)) expect(await highlighted(f)).toBe(false);
+  expect(await errs(f)).toEqual([]);
+});
+
+test('내부 스크롤러 + textScale 1.5에서도 일치를 화면에 보인다', async ({ page }) => {
+  await page.goto('/');
+  const id = await importFixture(page, '04-inner-scroll.zip');
+  const f = await openBook(page, id);
+  await send(page, { type: 'init', textScale: 1.5 });
+  await send(page, { type: 'find', query: '문단 150', snippet: '문단 150 이것은' });
+  await expect.poll(() => inView(f, '#p150')).toBe(true);
+});

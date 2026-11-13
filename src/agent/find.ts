@@ -36,23 +36,33 @@ export function findAndReveal(query: string, snippet: string): boolean {
   }
   const sn = fold(snippet), si = sn.indexOf(q);
   const before = si < 0 ? '' : sn.slice(0, si), after = si < 0 ? '' : sn.slice(si + q.length);
-  let best = -1, bestScore = -1;
+  const at = (i: number) => {
+    const r = document.createRange();
+    r.setStart(nodes[i], starts[i]);
+    r.setEnd(nodes[i + q.length - 1], ends[i + q.length - 1]);
+    return r;
+  };
+  let range: Range | null = null, bestScore = -1;
   for (let i = text.indexOf(q); i !== -1; i = text.indexOf(q, i + 1)) {
     let a = 0, b = 0;
     while (a < before.length && a < i && before[before.length - 1 - a] === text[i - 1 - a]) a++;
     while (b < after.length && after[b] === text[i + q.length + b]) b++;
-    if (a + b > bestScore) { best = i; bestScore = a + b; }
+    if (a + b <= bestScore) continue;
+    const r = at(i);
+    // Hidden: display:none has no boxes; a closed <details> (content-visibility:hidden in Chromium) fails checkVisibility.
+    if (!r.getClientRects().length || nodes[i].parentElement?.checkVisibility?.() === false) continue;
+    range = r; bestScore = a + b;
   }
-  if (best < 0) return false;
-  const j = best + q.length - 1;
-  const range = document.createRange();
-  range.setStart(nodes[best], starts[best]);
-  range.setEnd(nodes[j], ends[j]);
+  if (!range) return false;
 
+  // Centre in the scroller's visible part. Rects and scrollTop can use different units under CSS zoom, so measure the ratio.
   const el = findScroller();
-  const r = range.getBoundingClientRect();
-  const top = el === document.scrollingElement ? 0 : el.getBoundingClientRect().top;
-  el.scrollTop += r.top + r.height / 2 - top - el.clientHeight / 2;
+  const box = el === document.scrollingElement ? { top: 0, bottom: innerHeight } : el.getBoundingClientRect();
+  const y = () => { const r = range!.getBoundingClientRect(); return r.top + r.height / 2; };
+  const s0 = el.scrollTop, y0 = y(), d = y0 - (Math.max(box.top, 0) + Math.min(box.bottom, innerHeight)) / 2;
+  el.scrollTop = s0 + d;
+  const moved = y0 - y(), went = el.scrollTop - s0;
+  if (moved && went) el.scrollTop = s0 + (d * went) / moved;
 
   if ('highlights' in CSS) {
     if (!styled) {
