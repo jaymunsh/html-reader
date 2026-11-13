@@ -1,9 +1,13 @@
-let registration: Promise<ServiceWorkerRegistration | null> = Promise.resolve(null);
+let reg$: Promise<ServiceWorkerRegistration | null> | null = null;
 
-export function registerSw(): void {
-  if (!('serviceWorker' in navigator)) return;
-  registration = navigator.serviceWorker.register('/sw.js').catch(() => null);
+/** Registers lazily on first use, so call order (registerSw / ensureController / watchForUpdate) does not matter. */
+function registration(): Promise<ServiceWorkerRegistration | null> {
+  return (reg$ ??= 'serviceWorker' in navigator
+    ? navigator.serviceWorker.register('/sw.js').catch(() => null)
+    : Promise.resolve(null));
 }
+
+export function registerSw(): void { void registration(); }
 
 const READY_WAIT_MS = 10_000;
 
@@ -11,7 +15,11 @@ const READY_WAIT_MS = 10_000;
 export async function ensureController(): Promise<'ok' | 'unsupported'> {
   if (!('serviceWorker' in navigator)) return 'unsupported';
   // Rejected register, or a blocked one that resolves with no worker at all: nothing will ever control this page.
-  const reg = await registration;
+  if (navigator.serviceWorker.controller) {
+    try { sessionStorage.removeItem('sw-reload'); } catch { /* ignore */ }
+    return 'ok';
+  }
+  const reg = await registration();
   if (!reg || (!reg.installing && !reg.waiting && !reg.active)) return 'unsupported';
   await Promise.race([
     navigator.serviceWorker.ready.catch(() => undefined),
@@ -41,7 +49,7 @@ let waiting = false;
 export function watchForUpdate(onWaiting: () => void): void {
   if (!('serviceWorker' in navigator)) return;
   const found = () => { waiting = true; onWaiting(); };
-  void registration.then((reg) => {
+  void registration().then((reg) => {
     if (!reg) return;
     if (reg.waiting) found();
     reg.addEventListener('updatefound', () => {
@@ -65,7 +73,10 @@ export function applyUpdate(): void {
   const reload = () => location.reload();
   void sw?.getRegistration().then((reg) => {
     if (!reg?.waiting) { reload(); return; }
-    sw.addEventListener('controllerchange', reload, { once: true });
+    let done = false;
+    const once = () => { if (!done) { done = true; reload(); } };
+    sw.addEventListener('controllerchange', once, { once: true });
+    setTimeout(once, 3000); // controllerchange may never fire (e.g. waiting worker went redundant)
     reg.waiting.postMessage({ type: 'skip-waiting' });
   }, reload);
 }
