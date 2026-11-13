@@ -31,6 +31,8 @@ export function pickContext(i: ContextInput): PickedContext {
     if (r) return { bookId: r.bookId, useFallback: false };
     return FALLBACK;
   }
+  // Browser-initiated fetches (manifest, icons) have no client; app/reader assets never belong to a book.
+  if (!i.client && i.targetSameOrigin && (i.targetPathname.startsWith('/__app/') || i.targetPathname.startsWith('/__reader/'))) return NONE;
   const p = i.client?.pathname;
   if (p == null) return FALLBACK;
   const b = splitBookUrl(p);

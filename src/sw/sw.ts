@@ -39,7 +39,7 @@ function samePathname(href: string | null | undefined): string | null {
   }
 }
 
-async function handle(event: FetchEvent): Promise<Response | undefined> {
+async function pickBookId(event: FetchEvent): Promise<string | null> {
   const request = event.request;
   const url = new URL(request.url);
   const isNavigation = request.mode === 'navigate';
@@ -60,8 +60,26 @@ async function handle(event: FetchEvent): Promise<Response | undefined> {
         }
       : null,
   });
-  let ctxBookId = picked.bookId;
-  if (picked.useFallback) ctxBookId = activeMemo ?? (await getSetting('activeBookId').catch(() => null));
+  if (!picked.useFallback) return picked.bookId;
+  if (activeMemo) return activeMemo;
+  const stored = await getSetting('activeBookId').catch(() => null);
+  activeMemo = stored; // memo of IndexedDB truth (spec 5.1)
+  return stored;
+}
+
+/** Cross-origin requests are never intercepted; the browser fetches them itself. We only note them. */
+async function recordExternalIfBookContext(event: FetchEvent): Promise<void> {
+  const bookId = await pickBookId(event);
+  if (!bookId) return;
+  const url = new URL(event.request.url);
+  await recordIssue(bookId, url.origin + url.pathname, 'external').catch(() => {});
+}
+
+async function handle(event: FetchEvent): Promise<Response> {
+  const request = event.request;
+  const url = new URL(request.url);
+  const isNavigation = request.mode === 'navigate';
+  const ctxBookId = await pickBookId(event);
 
   const route = decideRoute({
     url, selfOrigin: self.location.origin, method: request.method, isNavigation,
@@ -79,19 +97,18 @@ async function handle(event: FetchEvent): Promise<Response | undefined> {
     case 'book-redirect':
       return Response.redirect(new URL(route.to, url.origin).href, 302);
     case 'book-file':
-      return serveBookFile(route, request);
-    case 'external':
-      event.waitUntil(recordIssue(route.bookId, url.origin + url.pathname, 'external').catch(() => {}));
-      return fetch(request);
+      return serveBookFile(route, request, (p) => event.waitUntil(p));
+    case 'external': // cross-origin never reaches here (handled before respondWith)
     case 'passthrough':
-      return undefined;
+      return fetch(request);
   }
 }
 
 self.addEventListener('fetch', (event) => {
-  // respondWith는 동기적으로 호출해야 하므로, passthrough 여부는 맥락 판정 전에 알 수 없다.
-  // 교차 출처이고 맥락이 없는 요청은 handle이 undefined를 돌려주고 네트워크로 보낸다.
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin && event.request.mode === 'navigate') return;
-  event.respondWith(handle(event).then((r) => r ?? fetch(event.request)));
+  if (url.origin !== self.location.origin) {
+    event.waitUntil(recordExternalIfBookContext(event));
+    return; // no respondWith: default browser handling
+  }
+  event.respondWith(handle(event));
 });

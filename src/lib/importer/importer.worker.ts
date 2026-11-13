@@ -6,8 +6,9 @@ import { extractText } from '../text-extract';
 import { mimeFor } from '../mime';
 import { cacheKey, naturalComparePaths } from '../path';
 import { readCentralDirectory, readEntry, ZipError } from '../zip';
-import { cacheNameFor, commitNewBook, listBooks, newBookId, withImportLock } from '../storage';
-import type { Book, TextRecord } from '../storage';
+import { cacheNameFor, listBooks, newBookId, withImportLock } from '../storage';
+import type { Book, BookFiles, TextRecord } from '../storage';
+import type { ReadyPayload } from './verify';
 import type { ImportMode } from './client';
 
 type In = { type: 'start'; file: File; mode: ImportMode } | { type: 'entry'; path: string | null };
@@ -49,12 +50,14 @@ function toImportError(e: unknown): ImportError {
   return new ImportError('failed', e instanceof Error ? e.message : String(e));
 }
 
-async function run(file: File, mode: ImportMode): Promise<string> {
+async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
   if (mode.kind !== 'new') throw new ImportError('failed', 'replace mode is not implemented');
   const items = await loadItems(file);
   if (!items.some((i) => isHtmlPath(i.path))) throw new ImportError('no-html');
   const total = items.reduce((s, i) => s + i.size, 0);
-  // The lock spans both the cache writes and the IDB commit, so cleanupOrphans never sees a half-done import.
+  // The lock covers the cache writes only; the page verifies the cache after this worker is gone and
+  // commits to IndexedDB under the same lock (see client.ts). Committing here could leave a book record
+  // whose cache entries WebKit dropped when the worker was terminated.
   return withImportLock(async () => {
     const bookId = newBookId();
     const cacheName = cacheNameFor(bookId, 1);
@@ -63,6 +66,7 @@ async function run(file: File, mode: ImportMode): Promise<string> {
       const pagePaths: string[] = [];
       const titles: Record<string, string> = {};
       const texts: TextRecord[] = [];
+      const sizes: Record<string, number> = {};
       let done = 0;
       let lastPost = 0;
       const onBytes = (n: number) => {
@@ -81,6 +85,7 @@ async function run(file: File, mode: ImportMode): Promise<string> {
           const src = detectEncoding(bytes);
           if (src.source === 'utf8' || src.source === 'fallback') type += `; charset=${src.encoding}`;
         }
+        sizes[item.path] = blob.size;
         await cache.put(cacheKey(bookId, item.path), new Response(blob, {
           headers: { 'Content-Type': type, 'Content-Length': String(blob.size) },
         }));
@@ -101,8 +106,8 @@ async function run(file: File, mode: ImportMode): Promise<string> {
         importedAt: now, lastOpenedAt: 0, lastPath: entryPath, textScale: 1,
       };
       if ((await cache.keys()).length !== items.length) throw new ImportError('failed', 'cache write verification failed');
-      await commitNewBook(book, { bookId, paths: items.map((i) => i.path), titles }, texts);
-      return bookId;
+      const bookFiles: BookFiles = { bookId, paths: items.map((i) => i.path), titles };
+      return { book, bookFiles, texts, cacheName, entrySize: sizes[entryPath] };
     } catch (e) {
       await caches.delete(cacheName).catch(() => {});
       throw e;
@@ -114,7 +119,7 @@ self.onmessage = (ev: MessageEvent<In>) => {
   const m = ev.data;
   if (m.type === 'entry') { entryResolver?.(m.path); entryResolver = null; return; }
   run(m.file, m.mode).then(
-    (bookId) => post({ type: 'done', bookId }),
+    (payload) => post({ type: 'ready', ...payload }),
     (e) => { const err = toImportError(e); post({ type: 'error', code: err.code, detail: err.detail }); },
   );
 };

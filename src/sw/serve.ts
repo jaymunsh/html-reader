@@ -42,30 +42,62 @@ async function indexFor(bookId: string, cacheName: string): Promise<PathIndex | 
   return idx;
 }
 
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+type WaitUntil = (p: Promise<unknown>) => void;
+
+/** Never rejects: storage failures become a 503 so respondWith does not produce a network error. */
 export async function serveBookFile(
   route: Extract<Route, { kind: 'book-file' }>,
   request: Request,
+  waitUntil?: WaitUntil,
+): Promise<Response> {
+  try {
+    return await serveInner(route, request, waitUntil);
+  } catch {
+    return new Response('서비스 워커가 저장소를 읽지 못했습니다.', {
+      status: 503,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  }
+}
+
+async function serveInner(
+  route: Extract<Route, { kind: 'book-file' }>,
+  request: Request,
+  waitUntil?: WaitUntil,
 ): Promise<Response> {
   const { bookId, rest, ctxBookId } = route;
+  // Recording must not delay the response; the SW stays alive for it via waitUntil.
+  const record = (id: string, path: string, kind: Parameters<typeof recordIssue>[2]) => {
+    const p = recordIssue(id, path, kind).catch(() => {});
+    if (waitUntil) waitUntil(p);
+  };
   const nav = request.mode === 'navigate';
   const url = new URL(request.url);
 
   const book = await getBook(bookId);
   if (!book) {
     if (ctxBookId && ctxBookId !== bookId) {
-      await recordIssue(ctxBookId, '../' + bookId + (rest ? '/' + rest : ''), 'outside-root').catch(() => {});
+      record(ctxBookId, '../' + bookId + (rest ? '/' + safeDecode(rest) : ''), 'outside-root');
     }
     return notFound(nav);
   }
 
   const norm = normalizeBookPath(rest);
   if (!norm.ok) {
-    await recordIssue(bookId, rest, 'outside-root').catch(() => {});
+    record(bookId, safeDecode(rest), 'outside-root');
     return notFound(nav);
   }
 
-  const missing = async (path: string) => {
-    if (!isIgnoredMissing(path)) await recordIssue(bookId, path, 'missing').catch(() => {});
+  const missing = (path: string) => {
+    if (!isIgnoredMissing(path)) record(bookId, path, 'missing');
     return notFound(nav);
   };
 

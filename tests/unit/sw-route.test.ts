@@ -75,3 +75,11 @@ test('4b. /book/<id> 슬래시 없는 네비게이션은 슬래시로 리다이�
   expect(r('/book/ab?x=1', { nav: true, dest: 'iframe', ctx: 'ab' })).toEqual({ kind: 'book-redirect', to: '/book/ab/?x=1' });
   expect(r('/book/ab', { dest: 'image', ctx: 'ab' })).toEqual({ kind: 'book-file', bookId: 'ab', rest: '', ctxBookId: 'ab' });
 });
+
+test('client 없는 /__app/·/__reader/ 하위 요청은 book 맥락이 아니다(manifest·아이콘)', () => {
+  expect(c({ targetPathname: '/__app/manifest.webmanifest' })).toEqual({ bookId: null, useFallback: false });
+  expect(c({ targetPathname: '/__reader/agent.js' })).toEqual({ bookId: null, useFallback: false });
+  expect(c({ targetPathname: '/x.png' })).toEqual({ bookId: null, useFallback: true });
+  // client가 있으면 기존 판정 유지
+  expect(c({ targetPathname: '/__app/x.js', client: { pathname: '/book/ab/i.html', frameType: 'nested', type: 'window' } })).toEqual({ bookId: 'ab', useFallback: false });
+});
