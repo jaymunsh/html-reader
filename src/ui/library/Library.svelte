@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    deleteBook, getAllProgress, getSetting, listAllIssues, listBooks, setSetting, type Book, type Issue, type PageProgress,
+    deleteBook, getAllProgress, getSetting, listAllIssues, listBooks, missingCount, setSetting, type Book, type Issue, type PageProgress,
   } from '../../lib/storage';
   import { bookProgress } from '../../lib/progress';
   import { needsIosTabNotice, isStandalone } from '../../lib/platform';
@@ -131,7 +131,7 @@
   {#each books as book (book.id)}
     {@const bp = bookProgress(book.pagePaths, progress.get(book.id) ?? new Map())}
     {@const bi = issues.get(book.id) ?? []}
-    <BookCard {book} pct={bp.pct} readCount={bp.readCount} missing={bi.filter((i) => i.kind !== 'external').length} online={bi.some((i) => i.kind === 'external')} onopen={open} ondelete={(b) => void ask({ del: b })} />
+    <BookCard {book} pct={bp.pct} readCount={bp.readCount} missing={missingCount(bi)} online={bi.some((i) => i.kind === 'external')} onopen={open} ondelete={(b) => void ask({ del: b })} />
   {/each}
 </main>
 

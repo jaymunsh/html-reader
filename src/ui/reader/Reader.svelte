@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
-  import { getBook, getBookFiles, getProgress, getSetting, listIssues, setSetting, updateBook, type Book, type Issue, type PageProgress } from '../../lib/storage';
+  import { getBook, getBookFiles, getProgress, getSetting, listIssues, missingCount, setSetting, updateBook, type Book, type Issue, type PageProgress } from '../../lib/storage';
   import { ProgressTracker, bookProgress, formatPageInfo } from '../../lib/progress';
   import { neighbor, orderedPages } from '../../lib/file-tree';
   import ProgressLine from './ProgressLine.svelte';
@@ -56,6 +56,7 @@
   // Resource issues: refreshed shortly after a page loads (the SW records as the page fetches) and when the overlay opens.
   let issues = $state<Issue[]>([]);
   const missing = $derived(issues.filter((i) => i.kind !== 'external'));
+  const nMissing = $derived(missingCount(issues));
   let issuesOpen = $state(false);
   let issuesHold: (() => void) | null = null;
   let btnIssues = $state<HTMLButtonElement>();
@@ -274,10 +275,10 @@
   <iframe bind:this={iframe} data-testid="reader-frame" title="문서" inert={sheet}></iframe>
   <div role="presentation" onpointerdown={pokeOverlay} inert={sheet}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back}>
     {#snippet topActions()}
-      {#if missing.length}
-        <button type="button" class="act badge warn" data-testid="issue-badge" bind:this={btnIssues} onclick={openIssues}><Icon name="warning" size={16} />누락 {missing.length}</button>
+      {#if nMissing}
+        <button type="button" class="act badge warn" data-testid="issue-badge" aria-label={`누락 ${nMissing}`} bind:this={btnIssues} onclick={openIssues}><Icon name="warning" size={16} /><span class="full">누락{' '}</span>{nMissing}</button>
       {/if}
-      {#if agent === 'limited'}<span class="badge info" data-testid="limited-badge">제한 모드</span>{/if}
+      {#if agent === 'limited'}<span class="badge info" data-testid="limited-badge" role="img" aria-label="제한 모드"><span class="ico"><Icon name="warning" size={16} /></span><span class="full">제한 모드</span></span>{/if}
       {#if !layout.desktop}
         <button type="button" class="act" data-testid="btn-panel" aria-label="파일·북마크" aria-expanded={sheetOpen} bind:this={btnPanel} onclick={openSheet}><Icon name="menu" /></button>
       {:else}
@@ -298,7 +299,7 @@
   <IssuesSheet open={issuesOpen} issues={missing} onClose={closeIssues} />
   {#if panelReady}
     <Panel open={panelOpen} bind:tab={panelTab} onClose={closePanel} bind:width={panelWidth}
-      onWidthCommit={(w) => void setSetting('panelWidth', w).catch(() => {})} onEscape={() => iframe?.focus()}>
+      onWidthCommit={(w) => void setSetting('panelWidth', w).catch(() => {})} onEscape={() => iframe?.focus()} blocked={issuesOpen}>
       {#snippet files()}
         {#if pages.length}
           <FilesTab open={panelOpen} {sourceName} pagePaths={pages} {titles} {progress} current={path} onpick={pick} />
@@ -333,6 +334,13 @@
   .act.badge { width: auto; min-width: 44px; padding: 0 8px; gap: 4px; display: inline-flex; align-items: center; justify-content: center; flex: none; font-size: 12px; font-weight: 600; white-space: nowrap; }
   .badge.warn { color: var(--warn-fg); background: var(--warn-bg); border-radius: var(--r-chip); }
   span.badge { flex: none; padding: 4px 8px; font-size: 12px; white-space: nowrap; border-radius: var(--r-chip); background: var(--info-bg); color: var(--info-fg); }
+  span.badge { min-height: 44px; display: inline-flex; align-items: center; box-sizing: border-box; }
+  .ico { display: none; }
+  @media (max-width: 359px) {
+    .full { display: none; }
+    .ico { display: inline-flex; }
+    span.badge { min-width: 44px; justify-content: center; }
+  }
   .zb { font-size: 14px; font-weight: 600; }
   .zv { min-width: 40px; text-align: center; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
   .empty { margin: 32px 16px; text-align: center; color: var(--text-3); }

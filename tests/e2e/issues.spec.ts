@@ -62,3 +62,19 @@ test('CSP로 agent가 막힌 문서는 "제한 모드"로 열리고 셸 소유 �
   await expect(page.getByTestId('zoom-in')).toBeDisabled();
   await expect(page.getByTestId('page-info')).toHaveText(/^1 \/ 1쪽/);
 });
+
+test('데스크톱: 시트가 열려 있는 동안 도킹 패널은 inert, 닫으면 복귀', async ({ page }) => {
+  await page.goto('/');
+  const id = await importFixture(page, '08-missing.zip');
+  await openBook(page, id);
+  await page.waitForTimeout(1000);
+  await openOverlay(page);
+  const panel = page.getByTestId('panel');
+  const desktop = await page.evaluate(() => matchMedia('(min-width: 768px)').matches);
+  if (desktop) await expect(panel).toHaveAttribute('data-open', 'true');
+  await page.getByTestId('overlay-top').getByTestId('issue-badge').click();
+  await expect(panel).toHaveJSProperty('inert', true);
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('issue-sheet')).toBeHidden();
+  if (desktop) await expect(panel).toHaveJSProperty('inert', false);
+});

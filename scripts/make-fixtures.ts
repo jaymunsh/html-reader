@@ -43,12 +43,12 @@ function wav(): Uint8Array {
   return b;
 }
 
-function cspHtml(): string {
+function cspHtml(body = ''): string {
   const head = '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="script-src \'none\'"><!--';
   const tail = '--><meta charset="utf-8">';
   const target = 1010;
   const html = head + 'x'.repeat(target - head.length - tail.length) + tail;
-  return html + '<title>CSP</title></head><body><h1 id="h">csp</h1></body></html>\n';
+  return html + '<title>CSP</title></head><body><h1 id="h">csp</h1>' + body + '</body></html>\n';
 }
 
 export function makeBigZip(outDir: string): void {
@@ -171,6 +171,7 @@ try { const r = indexedDB.deleteDatabase('html-reader'); r.onsuccess = () => __i
       f('page2.html', page({ title: '두 번째', h1: 'page2' })),
     ]),
     '13-csp.zip': z([f('index.html', cspHtml())]),
+    '13-csp-missing.zip': z([f('index.html', cspHtml('<img src="img/none.png">'))]),
     'err-encrypted.zip': z([f('index.html', page({ h1: 'enc' }), { encrypted: true })]),
     'err-nohtml.zip': z([f('notes.txt', 'hello'), f('style.css', 'body{}')]),
     'err-crc.zip': z([f('index.html', page({ h1: 'crc' }), { corruptCrc: true })]),

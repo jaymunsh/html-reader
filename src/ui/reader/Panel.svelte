@@ -6,9 +6,9 @@
   const PANEL_MIN = 240;
   const PANEL_MAX = 480;
 
-  let { open, tab = $bindable('files'), onClose, width = $bindable(320), onWidthCommit, onEscape, files, bookmarks }: {
+  let { open, tab = $bindable('files'), onClose, width = $bindable(320), onWidthCommit, onEscape, blocked = false, files, bookmarks }: {
     open: boolean; tab: 'files' | 'bookmarks'; onClose(): void;
-    width?: number; onWidthCommit?(w: number): void; onEscape?(): void;
+    width?: number; onWidthCommit?(w: number): void; onEscape?(): void; blocked?: boolean;
     files: Snippet; bookmarks: Snippet;
   } = $props();
 
@@ -47,7 +47,7 @@
   <div class="scrim" class:open role="presentation" onclick={onClose}></div>
 {/if}
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<aside bind:this={el} class="panel" class:dock={layout.desktop} class:open data-testid="panel" data-open={open} inert={!open}
+<aside bind:this={el} class="panel" class:dock={layout.desktop} class:open data-testid="panel" data-open={open} inert={!open || blocked}
   aria-label="패널" style:width={layout.desktop ? `${width}px` : null} {onkeydown}>
   {#if layout.desktop}
     <div class="resizer" data-testid="panel-resizer" role="separator" aria-orientation="vertical" aria-label="패널 폭"

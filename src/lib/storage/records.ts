@@ -46,6 +46,9 @@ export async function setSetting<K extends keyof Settings>(key: K, value: Settin
   await withTx('settings', 'readwrite', (tx) => { tx.objectStore('settings').put(value, key); });
 }
 
+/** Issues that mean the document is incomplete (external ones only mean it needs the network). */
+export const missingCount = (issues: Issue[]): number => issues.filter((i) => i.kind !== 'external').length;
+
 export async function listAllIssues(): Promise<Issue[]> {
   const db = await openDb();
   return req(db.transaction('issues').objectStore('issues').getAll());
