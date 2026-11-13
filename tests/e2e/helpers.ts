@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Frame, type Page } from '@playwright/test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -78,4 +78,19 @@ export async function importFixture(
   }, { timeout: 30_000 }).not.toBe('');
   await expect(page.locator(`[data-book-id="${id}"]`)).toBeVisible();
   return id;
+}
+
+/** Mount an iframe pointing straight at /book/<id>/<path> (no reader chrome). Returns its Frame. */
+export async function mountRawFrame(page: Page, id: string, path: string): Promise<Frame> {
+  const handle = await page.evaluateHandle(([i, p]) => {
+    const f = document.createElement('iframe');
+    f.setAttribute('data-raw-frame', '');
+    f.style.cssText = 'position:fixed;left:0;top:0;width:600px;height:400px;background:#fff;z-index:99999';
+    f.src = `/book/${i}/${p}`;
+    document.body.append(f);
+    return f;
+  }, [id, path] as const);
+  const frame = await handle.asElement()!.contentFrame();
+  if (!frame) throw new Error('iframe has no frame');
+  return frame;
 }

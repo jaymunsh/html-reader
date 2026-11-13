@@ -12,6 +12,9 @@ export function importFile(file: File, mode: ImportMode, hooks: ImportHooks): Pr
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./importer.worker.ts', import.meta.url), { type: 'module' });
     const finish = (fn: () => void) => { worker.terminate(); fn(); };
+    // WebKit with a controlling service worker drops Cache API writes when the worker is terminated
+    // right after finishing (cache reads from the page/SW then see an empty cache). Keep it alive briefly.
+    const finishOk = (fn: () => void) => { setTimeout(() => worker.terminate(), 5000); fn(); };
     worker.onmessage = (ev: MessageEvent) => {
       const m = ev.data;
       if (m.type === 'progress') hooks.onProgress?.(m.done, m.total);
@@ -20,7 +23,7 @@ export function importFile(file: File, mode: ImportMode, hooks: ImportHooks): Pr
           (path) => worker.postMessage({ type: 'entry', path }),
           () => worker.postMessage({ type: 'entry', path: null }),
         );
-      } else if (m.type === 'done') finish(() => resolve(m.bookId));
+      } else if (m.type === 'done') finishOk(() => resolve(m.bookId));
       else if (m.type === 'error') finish(() => reject(new ImportError(m.code as ImportErrorCode, m.detail)));
     };
     worker.onerror = (e) => finish(() => reject(new ImportError('failed', e.message)));
