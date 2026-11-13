@@ -53,3 +53,13 @@ test('문서 내용은 원본 색 그대로(앱 테마가 iframe에 새지 않�
   const f = await openBook(page, id);
   expect(await f.evaluate(() => document.documentElement.hasAttribute('data-theme'))).toBe(false);
 });
+
+test('CSS가 늦게 도착해도 theme-color가 #000000으로 칠해지지 않고 결국 올바른 값이 된다', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.route('**/__app/*.css', async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+  await page.goto('/', { waitUntil: 'commit' });
+  const meta = () => page.evaluate(() => document.querySelector('meta[name=theme-color]')?.getAttribute('content')?.toLowerCase());
+  await page.waitForTimeout(500);
+  expect(await meta()).not.toBe('#000000');
+  await expect.poll(meta, { timeout: 10_000 }).toBe('#eef0f4');
+});

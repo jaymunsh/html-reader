@@ -18,6 +18,8 @@ export function setChromeColor(screen: Screen): void {
   root.style.backgroundColor = v;
   document.body.style.backgroundColor = v;
   const rgb = getComputedStyle(root).backgroundColor;
+  // Stylesheet not applied yet: var() is unresolved (transparent -> '#000000'). Keep the static meta and retry once on load.
+  if (/^rgba\(.*,\s*0\)$|^transparent$/.test(rgb)) { addEventListener('load', () => setChromeColor(current), { once: true }); return; }
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', hex(rgb));
 }
 
