@@ -17,6 +17,7 @@
   import { createSession, type AgentState } from './session';
   import { isEditableTarget, shortcutFor, type Action } from '../../lib/shortcuts';
   import type { Mods } from '../../lib/protocol';
+  import { stepZoom, zoomLabel } from '../../lib/zoom';
 
   let { bookId, openPath, onexit, onopened }: {
     bookId: string; openPath?: string | null; onexit: () => void; onopened?: () => void;
@@ -98,6 +99,7 @@
   let session: ReturnType<typeof createSession> | null = null;
   let firstPath: string | null = null; // restore applies only to the page first requested
   let gone = false;
+  let scale = $state(1);
 
   const flush = () => { tracker?.flush().catch(() => {}); };
   const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
@@ -130,6 +132,7 @@
     if (gone) return;
     if (!b) { notice = 'missing'; return; }
     book = b;
+    scale = b.textScale ?? 1;
     pages = orderedPages(b.pagePaths);
     const files = await getBookFiles(bookId);
     titles = files?.titles ?? {};
@@ -191,12 +194,27 @@
   const prevPath = $derived(neighbor(pages, path, -1));
   const nextPath = $derived(neighbor(pages, path, 1));
 
+  // Keep the shell's book copy current: the next page's init (and the SW's data-scale) must carry the new zoom.
+  function zoomBy(dir: 1 | -1) {
+    if (agent === 'limited') return;
+    const next = stepZoom(scale, dir);
+    if (next === scale) return;
+    scale = next;
+    if (book) book.textScale = next;
+    session?.post({ type: 'set-scale', textScale: next });
+    void updateBook(bookId, { textScale: next }).then(() => tellSw({ type: 'book-changed', id: bookId })).catch(() => {});
+  }
+  const zoomOutOff = $derived(agent === 'limited' || stepZoom(scale, -1) === scale);
+  const zoomInOff = $derived(agent === 'limited' || stepZoom(scale, 1) === scale);
+
   // One dispatcher for the shell's own keydown and the agent's forwarded keys. Actions without a handler are ignored.
   const actions: Partial<Record<Action, () => void>> = {
     'toggle-overlay': onTap,
     'toggle-panel': () => { if (panelOpen) closePanel(); else if (layout.desktop) openDock(); else openSheet(); },
     'prev-page': () => go(-1),
     'next-page': () => go(1),
+    'zoom-in': () => zoomBy(1),
+    'zoom-out': () => zoomBy(-1),
     top: () => session?.post({ type: 'scroll-to', ratio: 0 }),
     bottom: () => session?.post({ type: 'scroll-to', ratio: 1 }),
   };
@@ -276,6 +294,9 @@
 
 {#snippet pn()}
   <button type="button" class="act" data-testid="btn-prev" aria-label="이전 쪽" disabled={!prevPath} onclick={() => go(-1)}><Icon name="prev" /></button>
+  <button type="button" class="act zb" data-testid="zoom-out" aria-label="글자 작게" disabled={zoomOutOff} onclick={() => zoomBy(-1)}>가-</button>
+  <span class="zv" data-testid="zoom-value">{zoomLabel(scale)}</span>
+  <button type="button" class="act zb" data-testid="zoom-in" aria-label="글자 크게" disabled={zoomInOff} onclick={() => zoomBy(1)}>가+</button>
   <button type="button" class="act" data-testid="btn-next" aria-label="다음 쪽" disabled={!nextPath} onclick={() => go(1)}><Icon name="next" /></button>
 {/snippet}
 
@@ -286,6 +307,8 @@
   .act:disabled, .nav button:disabled { opacity: .35; }
   .nav button { background: none; border: 0; color: var(--text); width: 44px; height: 44px; display: grid; place-items: center; }
   .act { background: none; border: 0; color: var(--text); width: 44px; height: 44px; display: grid; place-items: center; }
+  .zb { font-size: 14px; font-weight: 600; }
+  .zv { min-width: 40px; text-align: center; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
   .empty { margin: 32px 16px; text-align: center; color: var(--text-3); }
   iframe { position: fixed; top: var(--sat); left: 0; right: var(--panel-w); bottom: 0; width: calc(100% - var(--panel-w)); height: calc(100% - var(--sat)); border: 0; display: block; }
   .desk iframe { top: calc(var(--sat) + 48px); height: calc(100% - var(--sat) - 48px); }

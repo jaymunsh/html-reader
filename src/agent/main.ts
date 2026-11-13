@@ -59,6 +59,14 @@ function start(): void {
     const p = parseShellMessage(e.data);
     if (!p.ok) return;
     if (p.msg.type === 'scroll-to') { scrollToRatio(el, p.msg.ratio); return; }
+    if (p.msg.type === 'set-scale') {
+      const r = metrics(el).ratio;
+      currentScale = p.msg.textScale;
+      document.documentElement.style.zoom = String(currentScale);
+      scrollToRatio(el, r);
+      requestAnimationFrame(() => scrollToRatio(el, r));
+      return;
+    }
     if (p.msg.type !== 'init') return;
     const { textScale, restore } = p.msg;
     if (textScale !== currentScale) {
