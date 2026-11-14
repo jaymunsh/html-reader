@@ -1,6 +1,6 @@
 import { openDb, req, withTx } from './db';
 import { SETTING_DEFAULTS } from './types';
-import type { Issue, IssueKind, PageProgress, Settings, TextRecord } from './types';
+import type { Bookmark, Issue, IssueKind, PageProgress, Settings, TextRecord } from './types';
 
 export async function getProgress(bookId: string): Promise<Map<string, PageProgress>> {
   const db = await openDb();
@@ -52,4 +52,18 @@ export const missingCount = (issues: Issue[]): number => issues.filter((i) => i.
 export async function listAllIssues(): Promise<Issue[]> {
   const db = await openDb();
   return req(db.transaction('issues').objectStore('issues').getAll());
+}
+
+export async function listBookmarks(bookId: string): Promise<Bookmark[]> {
+  const db = await openDb();
+  const all = await req(db.transaction('bookmarks').objectStore('bookmarks').index('bookId').getAll(IDBKeyRange.only(bookId)) as IDBRequest<Bookmark[]>);
+  return all.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export async function putBookmark(b: Bookmark): Promise<void> {
+  await withTx('bookmarks', 'readwrite', (tx) => { tx.objectStore('bookmarks').put(b); });
+}
+
+export async function deleteBookmark(id: string): Promise<void> {
+  await withTx('bookmarks', 'readwrite', (tx) => { tx.objectStore('bookmarks').delete(id); });
 }
