@@ -1,4 +1,4 @@
-import { commitNewBook, listBooks, withImportLock } from '../storage';
+import { commitNewBook, commitReplace, listBooks, withImportLock } from '../storage';
 import type { Book } from '../storage';
 import { ImportError, toImportError, type ImportErrorCode } from './errors';
 import { dedupeTitle } from '../title';
@@ -21,6 +21,11 @@ async function commitReady(p: ReadyPayload, terminate: () => void): Promise<stri
     const ok = await verifyCacheReady(caches, p);
     terminate();
     if (!ok) throw new ImportError('failed', 'cache verification timed out');
+    if (p.replace) {
+      const prev = await commitReplace(p.book.id, p.book, p.bookFiles, p.texts, p.replace);
+      await caches.delete(prev).catch(() => {}); // only after the commit (spec §7.2-4); a leftover is an orphan for cleanup
+      return p.book.id;
+    }
     // Titles may have changed since the worker planned this book (concurrent imports).
     const title = dedupeTitle(p.baseTitle, (await listBooks()).map((b) => b.title));
     await commitNewBook({ ...p.book, title }, p.bookFiles, p.texts);

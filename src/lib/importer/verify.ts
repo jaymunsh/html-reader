@@ -1,5 +1,6 @@
 import { cacheKey } from '../path';
 import type { Book, BookFiles, TextRecord } from '../storage';
+import type { ReplacePlan } from '../reimport';
 
 /** Worker -> page: everything is in the Cache API; the page verifies and commits to IndexedDB. */
 export interface ReadyPayload {
@@ -10,6 +11,8 @@ export interface ReadyPayload {
   entrySize: number;
   /** Title before de-duplication; the page re-dedupes it against the current list inside the lock. */
   baseTitle: string;
+  /** Set for a replace import: the page commits with commitReplace (title kept) instead of commitNewBook. */
+  replace?: ReplacePlan;
 }
 
 export interface CacheStorageLike {

@@ -26,7 +26,10 @@ const css = (href: string) => `<link rel="stylesheet" href="${href}">`;
 const f = (name: string, data: string | Uint8Array, extra: Partial<BuildEntry> = {}): BuildEntry => ({ name, data, ...extra });
 
 function writeAll(out: string, files: Record<string, Uint8Array | string>) {
-  for (const [n, d] of Object.entries(files)) writeFileSync(join(out, n), typeof d === 'string' ? enc.encode(d) : d);
+  for (const [n, d] of Object.entries(files)) {
+    mkdirSync(dirname(join(out, n)), { recursive: true });
+    writeFileSync(join(out, n), typeof d === 'string' ? enc.encode(d) : d);
+  }
 }
 
 /** 1 second, 8 kHz, 8-bit mono PCM WAV (deterministic triangle-ish pattern). */
@@ -185,6 +188,21 @@ try { const r = indexedDB.deleteDatabase('html-reader'); r.onsuccess = () => __i
       f('other.html', long({ title: '다른 쪽', h1: 'other' }).replace('<p id="p120">', '<p id="split">여기 <b>알</b>파카 가 있다</p>\n<p id="p120">')
         .replace('<p id="p130">', '<p id="lit">태그 글자 &lt;b&gt;굵게&lt;/b&gt; 그대로</p>\n<p id="p130">')
         .replace('</body>', `<script>document.body.insertAdjacentHTML('beforeend','<p id="late">늦게 생긴 문장</p>')</script>\n</body>`)),
+    ]),
+    // Same file name in three folders: a re-import of a revised bundle (replace), and a corrupted revision.
+    'reimport/v1/report.zip': z([
+      f('index.html', long({ title: '보고서', h1: 'v1' })),
+      f('keep.html', long({ title: '유지', h1: 'keep' })),
+      f('gone.html', long({ title: '사라짐', h1: 'gone' })),
+    ]),
+    'reimport/v2/report.zip': z([
+      f('index.html', long({ title: '보고서', h1: 'v2' })),
+      f('keep.html', long({ title: '유지', h1: 'keep', special: { 1: '개정판 문장' } })),
+      f('new.html', long({ title: '새 쪽', h1: 'new' })),
+    ]),
+    'reimport/bad/report.zip': z([
+      f('index.html', long({ title: '보고서', h1: 'bad' })),
+      f('keep.html', long({ title: '유지', h1: 'keep' }), { corruptCrc: true }),
     ]),
     'pick-entry.zip': z([f('a.html', page({ title: 'A', h1: 'a' })), f('b.html', page({ title: 'B', h1: 'b' }))]),
   });

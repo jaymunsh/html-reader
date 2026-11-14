@@ -6,7 +6,8 @@ import { extractText } from '../text-extract';
 import { mimeFor } from '../mime';
 import { cacheKey, naturalComparePaths } from '../path';
 import { readCentralDirectory, readEntry } from '../zip';
-import { cacheNameFor, listBooks, newBookId } from '../storage';
+import { cacheNameFor, getBook, getProgress, listBookmarks, listBooks, newBookId, parseCacheName } from '../storage';
+import { pickReplaceEntry, planReplace } from '../reimport';
 import type { Book, BookFiles, TextRecord } from '../storage';
 import type { ReadyPayload } from './verify';
 import type { ImportMode } from './client';
@@ -44,16 +45,19 @@ async function loadItems(file: File): Promise<Item[]> {
 }
 
 async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
-  if (mode.kind !== 'new') throw new ImportError('failed', 'replace mode is not implemented');
+  // Replace (spec §7.2): same id, next cache version; the old book stays readable until the page commits.
+  const prev = mode.kind === 'replace' ? await getBook(mode.bookId) : undefined;
+  if (mode.kind === 'replace' && !prev) throw new ImportError('failed', 'book to replace is gone');
   const items = await loadItems(file);
   if (!items.some((i) => isHtmlPath(i.path))) throw new ImportError('no-html');
   const total = items.reduce((s, i) => s + i.size, 0);
   // No lock here: the page holds the import lock for the whole import (see client.ts), verifies the cache after
   // this worker is gone and only then commits to IndexedDB. Committing here could leave a book record whose
   // cache entries WebKit dropped when the worker was terminated.
-  const bookId = newBookId();
-  const cacheName = cacheNameFor(bookId, 1);
+  const bookId = prev?.id ?? newBookId();
+  const cacheName = cacheNameFor(bookId, prev ? (parseCacheName(prev.cacheName)?.n ?? 1) + 1 : 1);
   try {
+    if (prev) await caches.delete(cacheName); // a leftover of a crashed replace (never the live cache) must not mix in
     const cache = await caches.open(cacheName);
     const pagePaths: string[] = [];
     const titles: Record<string, string> = {};
@@ -84,22 +88,31 @@ async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
     }
     pagePaths.sort(naturalComparePaths);
     if (!pagePaths.length) throw new ImportError('no-html');
-    let entryPath = pickEntryPath(pagePaths);
+    let entryPath = prev ? pickReplaceEntry(pagePaths, prev.entryPath) : pickEntryPath(pagePaths);
     if (entryPath === null) {
       entryPath = await askEntry(pagePaths);
       if (entryPath === null) throw new ImportError('cancelled');
+    }
+    if ((await cache.keys()).length !== items.length) throw new ImportError('failed', 'cache write verification failed');
+    const bookFiles: BookFiles = { bookId, paths: items.map((i) => i.path), titles };
+    const now = Date.now();
+    if (prev) {
+      // The title is not recomputed: a replace keeps the (possibly user-chosen) name.
+      const [progress, bookmarks] = await Promise.all([getProgress(bookId), listBookmarks(bookId)]);
+      const plan = planReplace({
+        newPaths: bookFiles.paths, progressPaths: [...progress.keys()], bookmarks, lastPath: prev.lastPath, newEntryPath: entryPath,
+      });
+      const book: Book = { ...prev, cacheName, entryPath, pagePaths, fileCount: items.length, totalBytes: total, importedAt: now };
+      return { book, bookFiles, texts, cacheName, entrySize: sizes[entryPath], baseTitle: prev.title, replace: plan };
     }
     const sourceName = sourceNameOf(file.name).normalize('NFC');
     const existing = (await listBooks()).map((b) => b.title);
     const baseTitle = defaultTitle(titles[entryPath] ?? '', sourceName);
     const title = dedupeTitle(baseTitle, existing);
-    const now = Date.now();
     const book: Book = {
       id: bookId, title, sourceName, cacheName, entryPath, pagePaths, fileCount: items.length, totalBytes: total,
       importedAt: now, lastOpenedAt: 0, lastPath: entryPath, textScale: 1,
     };
-    if ((await cache.keys()).length !== items.length) throw new ImportError('failed', 'cache write verification failed');
-    const bookFiles: BookFiles = { bookId, paths: items.map((i) => i.path), titles };
     return { book, bookFiles, texts, cacheName, entrySize: sizes[entryPath], baseTitle };
   } catch (e) {
     await caches.delete(cacheName).catch(() => {});

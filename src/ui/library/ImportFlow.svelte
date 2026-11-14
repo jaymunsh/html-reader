@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { importFile } from '../../lib/importer/client';
+  import { findBySourceName, importFile, type ImportMode } from '../../lib/importer/client';
+  import { sourceNameOf } from '../../lib/importer/plan';
+  import type { Book } from '../../lib/storage';
+  import { tellSw } from '../sw-client';
   import { ImportError, importErrorMessage, type ImportErrorCode } from '../../lib/importer/errors';
   import Dialog from './Dialog.svelte';
 
@@ -14,17 +17,28 @@
   let nextId = 0;
   let choices = $state<string[] | null>(null);
   let pick: ((p: string | null) => void) | null = null;
-  const showErrors = $derived(!choices && !held && errors.length > 0);
-  $effect(() => { modal = !!choices || showErrors; });
+  // Same sourceName already in the library (spec §7.2): replace it or add as a new book.
+  let dup = $state<Book | null>(null);
+  let dupAnswer: ((a: 'replace' | 'add' | null) => void) | null = null;
+  const showErrors = $derived(!choices && !dup && !held && errors.length > 0);
+  $effect(() => { modal = !!choices || !!dup || showErrors; });
 
   export async function start(file: File): Promise<void> {
     if (busy) return;
-    busy = true; pct = 0;
+    busy = true; pct = 0; // before the dup question, so the library shows the import as running meanwhile
     try {
-      await importFile(file, { kind: 'new' }, {
+      let mode: ImportMode = { kind: 'new' };
+      const same = await findBySourceName(sourceNameOf(file.name));
+      if (same) {
+        const a = await new Promise<'replace' | 'add' | null>((res) => { dupAnswer = res; dup = same; });
+        if (!a) return;
+        if (a === 'replace') mode = { kind: 'replace', bookId: same.id };
+      }
+      await importFile(file, mode, {
         onProgress: (d, t) => { pct = t ? Math.round((d / t) * 100) : 100; },
         chooseEntry: (paths) => new Promise((res) => { pick = res; choices = paths; }),
       });
+      if (mode.kind === 'replace') tellSw({ type: 'book-changed', id: mode.bookId }); // the SW memoizes cacheName
       onimported();
     } catch (e) {
       const code = e instanceof ImportError ? e.code : 'failed';
@@ -35,13 +49,23 @@
   }
 
   function choose(p: string | null) { choices = null; pick?.(p); pick = null; }
+  function answer(a: 'replace' | 'add' | null) { dup = null; dupAnswer?.(a); dupAnswer = null; }
   // Unmounted mid-choice: cancel it, or the import (and its lock) would wait forever.
-  onDestroy(() => choose(null));
+  onDestroy(() => { choose(null); answer(null); });
 </script>
 
 <!-- The entry choice also waits behind a library dialog. `held` is read first: with `choices && !held`, Svelte 5.57
-     did not re-run this block when `held` alone turned false (the choice never appeared). -->
-{#if !held && choices}
+     did not re-run this block when `held` alone turned false (the choice never appeared). Same for the dup question. -->
+{#if !held && dup}
+  <Dialog title="같은 문서가 있습니다" oncancel={() => answer(null)}>
+    <p>"{dup.title}" 문서가 이미 있습니다.</p>
+    <div class="actions">
+      <button type="button" class="primary" data-testid="dup-replace" onclick={() => answer('replace')}>기존 문서 교체</button>
+      <button type="button" data-testid="dup-add" onclick={() => answer('add')}>새 문서로 추가</button>
+      <button type="button" data-testid="confirm-cancel" onclick={() => answer(null)}>취소</button>
+    </div>
+  </Dialog>
+{:else if !held && choices}
   <Dialog title="시작 페이지 선택" oncancel={() => choose(null)}>
     <p>시작할 페이지를 선택하세요.</p>
     <div class="options">

@@ -120,3 +120,19 @@ test('비동기 요청 실패(ConstraintError)도 null이 아닌 오류로 거�
   expect(typeof err.name).toBe('string');
   expect(await S.getBookFiles('cccccccccccc')).toBeUndefined();
 });
+test('commitReplace: 포인터·파일·텍스트 교체, 기록 정리, 식별 정보 유지', async () => {
+  const id = 'aaaaaaaaaaaa';
+  await S.commitNewBook(book(id, { title: '내가 바꾼 이름', textScale: 1.25, lastPath: 'gone.html' }), { bookId: id, paths: ['index.html', 'gone.html'], titles: {} },
+    [{ bookId: id, path: 'gone.html', text: 'old' }]);
+  await S.putProgress({ bookId: id, path: 'gone.html', maxPct: 50, lastScrollRatio: 0.5, read: false, updatedAt: 1 });
+  await S.putProgress({ bookId: id, path: 'index.html', maxPct: 80, lastScrollRatio: 0.7, read: false, updatedAt: 1 });
+  await S.recordIssue(id, 'x.png', 'missing');
+  const old = await S.commitReplace(id, { cacheName: S.cacheNameFor(id, 2), entryPath: 'index.html', pagePaths: ['index.html', 'new.html'], fileCount: 2, totalBytes: 20, importedAt: 99 },
+    { bookId: id, paths: ['index.html', 'new.html'], titles: {} }, [{ bookId: id, path: 'new.html', text: 'new' }],
+    { dropProgress: ['gone.html'], dropBookmarkIds: [], lastPath: 'index.html' });
+  expect(old).toBe(S.cacheNameFor(id, 1));
+  expect(await S.getBook(id)).toMatchObject({ title: '내가 바꾼 이름', textScale: 1.25, sourceName: 's', cacheName: `book-${id}-v2`, lastPath: 'index.html', importedAt: 99 });
+  expect([...(await S.getProgress(id)).keys()]).toEqual(['index.html']);
+  expect((await S.getTexts(id)).map((t) => t.path)).toEqual(['new.html']);
+  expect(await S.listIssues(id)).toEqual([]);
+});

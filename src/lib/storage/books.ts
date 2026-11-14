@@ -1,4 +1,5 @@
-import { deleteBookRecords, openDb, req, withTx } from './db';
+import { deleteBookRecords, keysByBook, openDb, req, withTx } from './db';
+import type { ReplacePlan } from '../reimport';
 import type { Book, BookFiles, TextRecord } from './types';
 
 export function newBookId(): string {
@@ -27,6 +28,35 @@ export function commitNewBook(book: Book, files: BookFiles, texts: TextRecord[])
     tx.objectStore('bookFiles').put(files);
     const t = tx.objectStore('texts');
     for (const rec of texts) t.put(rec);
+  });
+}
+
+/**
+ * Replace import (spec §7.2-3), one transaction: point the book at the new cache, swap its files and texts, drop the
+ * records the plan names and all issues. id, title, sourceName, textScale and lastOpenedAt are kept.
+ * Returns the previous cacheName (the caller deletes that cache after this commits).
+ */
+export function commitReplace(
+  bookId: string, next: Pick<Book, 'cacheName' | 'entryPath' | 'pagePaths' | 'fileCount' | 'totalBytes' | 'importedAt'>,
+  files: BookFiles, texts: TextRecord[], plan: ReplacePlan,
+): Promise<string> {
+  return withTx(['books', 'bookFiles', 'texts', 'progress', 'bookmarks', 'issues'], 'readwrite', async (tx) => {
+    const books = tx.objectStore('books');
+    const cur = await req(books.get(bookId) as IDBRequest<Book | undefined>);
+    if (!cur) throw new Error(`commitReplace: no book ${bookId}`);
+    const { cacheName, entryPath, pagePaths, fileCount, totalBytes, importedAt } = next;
+    books.put({ ...cur, cacheName, entryPath, pagePaths, fileCount, totalBytes, importedAt, lastPath: plan.lastPath });
+    tx.objectStore('bookFiles').put(files);
+    const t = tx.objectStore('texts');
+    for (const k of await keysByBook(tx, 'texts', bookId)) t.delete(k);
+    for (const rec of texts) t.put(rec);
+    const pr = tx.objectStore('progress');
+    for (const path of plan.dropProgress) pr.delete([bookId, path]);
+    const bm = tx.objectStore('bookmarks');
+    for (const id of plan.dropBookmarkIds) bm.delete(id);
+    const is = tx.objectStore('issues');
+    for (const k of await keysByBook(tx, 'issues', bookId)) is.delete(k);
+    return cur.cacheName;
   });
 }
 
