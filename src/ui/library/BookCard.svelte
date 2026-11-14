@@ -4,8 +4,8 @@
   import ProgressRing from './ProgressRing.svelte';
   import Menu from '../Menu.svelte';
   import { ymd } from '../../lib/date';
-  let { book, pct, readCount, missing = 0, online = false, onopen, ondelete }: {
-    book: Book; pct: number; readCount: number; missing?: number; online?: boolean; onopen: (id: string) => void; ondelete: (book: Book) => void;
+  let { book, pct, readCount, missing = 0, online = false, onopen, ondelete, onrename }: {
+    book: Book; pct: number; readCount: number; missing?: number; online?: boolean; onopen: (id: string) => void; ondelete: (book: Book) => void; onrename: (book: Book) => void;
   } = $props();
   let menu = $state(false);
   let el = $state<HTMLElement>();
@@ -39,7 +39,7 @@
   }
 </script>
 
-<div bind:this={el} class="card" data-testid="book-card" data-book-id={book.id} data-title={book.title} role="button" tabindex="0"
+<div bind:this={el} class="card" class:open={menu} data-testid="book-card" data-book-id={book.id} data-title={book.title} role="button" tabindex="0"
   onclick={click} onpointerdown={down} onpointermove={move} onpointerup={stop} onpointercancel={stop}
   oncontextmenu={(e) => { e.preventDefault(); clearTimeout(timer); menu = true; }}
   onkeydown={(e) => {
@@ -60,6 +60,7 @@
   <!-- A press elsewhere on the card is the card's own (it closes the menu and swallows the click). -->
   <Menu bind:open={menu} testid="book-menu" within={el}>
     {#snippet children(close)}
+      <button type="button" role="menuitem" data-testid="menu-rename" onclick={() => { close(); onrename(book); }}>이름 바꾸기</button>
       <button type="button" role="menuitem" class="danger" data-testid="menu-delete" onclick={() => { close(); ondelete(book); }}>삭제</button>
     {/snippet}
   </Menu>
@@ -72,6 +73,8 @@
     -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
     transition: transform .15s ease;
   }
+  /* The open menu overlaps the cards below it: lift this card so they do not take its presses. */
+  .card.open { z-index: 1; }
   .card:active { transform: scale(.985); }
   .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }

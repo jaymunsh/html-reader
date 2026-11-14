@@ -183,6 +183,8 @@ try { const r = indexedDB.deleteDatabase('html-reader'); r.onsuccess = () => __i
       const n = String(i + 1).padStart(3, '0');
       return f(`p${n}.html`, page({ title: `쪽 ${n}`, h1: `p${n}` }));
     })),
+    'title-a.zip': z([f('index.html', long({ title: '보고서', h1: 'a' }))]),
+    'title-b.zip': z([f('index.html', long({ title: '보고서', h1: 'b' }))]),
     'search.zip': z([
       f('index.html', long({ title: '검색', h1: 'search', special: { 30: '첫 번째 고래 이야기', 170: '두 번째 고래 이야기 끝' } })),
       f('other.html', long({ title: '다른 쪽', h1: 'other' }).replace('<p id="p120">', '<p id="split">여기 <b>알</b>파카 가 있다</p>\n<p id="p120">')

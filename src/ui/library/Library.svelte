@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import {
-    deleteBook, getAllProgress, getSetting, listAllIssues, listBooks, missingCount, setSetting, type Book, type Issue, type PageProgress,
+    deleteBook, getAllProgress, getSetting, listAllIssues, listBooks, missingCount, setSetting, updateBook, type Book, type Issue, type PageProgress,
   } from '../../lib/storage';
+  import { validateTitle } from '../../lib/title';
   import { bookProgress } from '../../lib/progress';
   import { needsIosTabNotice, isStandalone } from '../../lib/platform';
   import BookCard from './BookCard.svelte';
@@ -23,7 +24,7 @@
   let flowModal = $state(false);
   let loaded = $state(false);
 
-  type Dlg = 'ios' | 'temp' | 'safety' | { del: Book };
+  type Dlg = 'ios' | 'temp' | 'safety' | { del: Book } | { rename: Book };
   let dlg = $state<Dlg | null>(null);
   let answer: ((ok: boolean) => void) | null = null;
   // One dialog at a time: later asks wait for the open one to be answered.
@@ -33,6 +34,19 @@
     dlgQ = p.then(() => {}, () => {});
     return p;
   };
+  const del = $derived(dlg && typeof dlg === 'object' && 'del' in dlg ? dlg.del : null);
+  const ren = $derived(dlg && typeof dlg === 'object' && 'rename' in dlg ? dlg.rename : null);
+  let renameInput = $state('');
+  const check = $derived(validateTitle(renameInput));
+  const dupName = $derived(check.ok && books.some((b) => b.id !== ren?.id && b.title === check.title));
+  function startRename(b: Book) { renameInput = b.title; void ask({ rename: b }); }
+  async function saveRename() {
+    const r = ren, c = check;
+    if (!r || !c.ok) return;
+    reply(true);
+    await updateBook(r.id, { title: c.title }).catch(() => {});
+    await refresh();
+  }
   function reply(ok: boolean) { dlg = null; answer?.(ok); answer = null; }
 
   async function refresh() {
@@ -114,11 +128,11 @@
   function open(id: string) { if (!busy) onopen(id); }
 
   async function confirmDelete() {
-    const d = dlg;
+    const d = del;
     reply(true);
-    if (!d || typeof d !== 'object') return;
-    const i = books.findIndex((b) => b.id === d.del.id);
-    await deleteBook(d.del.id); await refresh(); await tick();
+    if (!d) return;
+    const i = books.findIndex((b) => b.id === d.id);
+    await deleteBook(d.id); await refresh(); await tick();
     // Focus the next card's menu, else the previous one's, else the import button (the deleted card's menu is gone).
     const near = books[i] ?? books[i - 1];
     const to = (near && document.querySelector<HTMLElement>(`[data-book-id="${near.id}"] [data-testid=book-menu]`))
@@ -146,7 +160,7 @@
         {#each books as book (book.id)}
           {@const bp = bookProgress(book.pagePaths, progress.get(book.id) ?? new Map())}
           {@const bi = issues.get(book.id) ?? []}
-          <BookCard {book} pct={bp.pct} readCount={bp.readCount} missing={missingCount(bi)} online={bi.some((i) => i.kind === 'external')} onopen={open} ondelete={(b) => void ask({ del: b })} />
+          <BookCard {book} pct={bp.pct} readCount={bp.readCount} missing={missingCount(bi)} online={bi.some((i) => i.kind === 'external')} onopen={open} ondelete={(b) => void ask({ del: b })} onrename={startRename} />
         {/each}
       </div>
     {:else if loaded}
@@ -194,9 +208,22 @@
     <p>직접 만들었거나 신뢰하는 문서만 가져오세요. 문서 안의 스크립트는 이 앱의 저장 데이터에 접근할 수 있습니다.</p>
     <div class="actions"><button type="button" class="primary" data-testid="confirm-ok" onclick={() => reply(true)}>확인</button></div>
   </Dialog>
-{:else if dlg}
+{:else if ren}
+  <Dialog title="이름 바꾸기" testid="rename-dialog" oncancel={() => reply(false)}>
+    <form onsubmit={(e) => { e.preventDefault(); void saveRename(); }}>
+      <input class="rename" data-testid="rename-input" data-autofocus aria-label="문서 이름" aria-invalid={!check.ok} bind:value={renameInput}
+        onfocus={(e) => e.currentTarget.select()} />
+      {#if !check.ok}<p class="err" data-testid="rename-error" role="alert">{check.reason === 'empty' ? '이름을 입력해 주세요.' : '이름은 100자까지 쓸 수 있습니다.'}</p>
+      {:else if dupName}<p class="err" data-testid="dup-name-warning" role="status">같은 이름의 문서가 이미 있습니다.</p>{/if}
+      <div class="actions">
+        <button type="submit" class="primary" data-testid="rename-save" disabled={!check.ok}>저장</button>
+        <button type="button" data-testid="confirm-cancel" onclick={() => reply(false)}>취소</button>
+      </div>
+    </form>
+  </Dialog>
+{:else if del}
   <Dialog title="문서 삭제" oncancel={() => reply(false)}>
-    <p>"{dlg.del.title}" 문서를 삭제할까요? 진행률과 북마크도 함께 지워집니다.</p>
+    <p>"{del.title}" 문서를 삭제할까요? 진행률과 북마크도 함께 지워집니다.</p>
     <div class="actions">
       <button type="button" class="danger" data-testid="confirm-ok" onclick={confirmDelete}>삭제</button>
       <button type="button" data-testid="confirm-cancel" data-autofocus onclick={() => reply(false)}>취소</button>
@@ -216,6 +243,11 @@
   .title h1 { margin: 0; font-size: 34px; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; }
   .desk .title { margin: 16px 0 24px; }
   .settings { flex: none; cursor: pointer; border-radius: var(--r-control); background: var(--surface); box-shadow: var(--shadow-card); }
+  .rename {
+    width: 100%; box-sizing: border-box; min-height: 48px; margin: 8px 0 12px; padding: 0 12px; font: inherit; font-size: 16px;
+    color: var(--text); background: var(--bg-app); border: 1px solid var(--hairline); border-radius: var(--r-control);
+  }
+  .err { margin: 0 0 12px; font-size: 14px; color: var(--warn-fg); }
   .list { display: flex; flex-direction: column; gap: 10px; }
   .desk .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
   .empty { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 72px 24px; text-align: center; }
