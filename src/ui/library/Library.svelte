@@ -101,9 +101,9 @@
     } finally { draining = false; }
   }
 
-  // Batches are gated and imported strictly in arrival order.
+  // The one import funnel (button, drop, launchQueue, share): batches are gated and imported strictly in arrival order.
   let batches: Promise<void> = Promise.resolve();
-  function enter(files: File[]) {
+  export function enqueue(files: File[]) {
     batches = batches.then(() => gateAndImport(files)).catch(() => {});
     return batches;
   }
@@ -124,7 +124,7 @@
   }
 
   function onchange() {
-    void enter([...(input.files ?? [])]);
+    void enqueue([...(input.files ?? [])]);
     input.value = '';
   }
 
@@ -133,7 +133,7 @@
   function ondrop(e: DragEvent) {
     if (!hasFiles(e)) return;
     e.preventDefault(); dragging = false;
-    void enter([...e.dataTransfer!.files]);
+    void enqueue([...e.dataTransfer!.files]);
   }
 
   // Opening a book unmounts the library and with it the running import (and its entry choice): not while importing.

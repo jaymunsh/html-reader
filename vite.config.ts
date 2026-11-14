@@ -27,6 +27,8 @@ export default defineConfig({
           { src: '/__app/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/__app/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
+        file_handlers: [{ action: '/', accept: { 'application/zip': ['.zip'], 'text/html': ['.html', '.htm'] } }],
+        launch_handler: { client_mode: ['focus-existing', 'auto'] },
       },
     }),
   ],

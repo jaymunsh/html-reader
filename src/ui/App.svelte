@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
+  import { initLaunch, type LaunchQueueLike } from '../lib/launch';
   import { cleanupOrphans, importRunning } from '../lib/storage';
   import Library from './library/Library.svelte';
   import { setScreen } from './chrome';
@@ -18,14 +19,29 @@
   let updateReady = $state(false);
   onMount(() => watchForUpdate(() => { updateReady = true; }));
 
+  let receiving = false; // files are on their way to the library: no update reload before their import takes the lock
   function toLibrary() {
     clean();
     screen = { name: 'library' };
     let wanted = false;
     try { wanted = sessionStorage.getItem('update-wanted') === '1'; } catch { /* ignore */ }
     // Applying reloads every tab: never while an import (any tab) is running; the banner stays for later.
-    if (hasWaitingUpdate() || wanted) void importRunning().then((busy) => { if (!busy) applyUpdate(); });
+    if (!receiving && (hasWaitingUpdate() || wanted)) void importRunning().then((busy) => { if (!busy) applyUpdate(); });
   }
+
+  // Files opened with the installed app (§7.5) go through the library's one import funnel.
+  let lib = $state<Library>();
+  let reader = $state<{ exit(): Promise<void> }>();
+  async function receiveFiles(files: File[]) {
+    receiving = true;
+    try {
+      if (screen.name === 'reader' && reader) await reader.exit(); // flushes progress, clears activeBookId, onexit → library
+      else if (screen.name !== 'library') screen = { name: 'library' };
+      await tick(); // the library mounts (and binds) only on its screen
+    } finally { receiving = false; }
+    void lib?.enqueue(files);
+  }
+  onMount(() => initLaunch((window as unknown as { launchQueue?: LaunchQueueLike }).launchQueue, (files) => void receiveFiles(files)));
 
   $effect(() => { document.documentElement.dataset.screen = screen.name; setScreen(screen.name); });
 
@@ -44,7 +60,7 @@
 {#if screen.name === 'reader'}
   {#key screen.id}
     {#await import('./reader/Reader.svelte') then { default: Reader }}
-      <Reader bookId={screen.id} openPath={screen.path} onopened={clean} onexit={toLibrary} />
+      <Reader bind:this={reader} bookId={screen.id} openPath={screen.path} onopened={clean} onexit={toLibrary} />
     {:catch}
       <div role="alert" data-testid="reader-load-error">
         <p>문서를 열 수 없습니다.</p>
@@ -55,7 +71,7 @@
 {:else if screen.name === 'settings'}
   <Settings onback={() => (screen = { name: 'library' })} />
 {:else}
-  <Library {updateReady} onapply={() => void importRunning().then((busy) => { if (!busy) applyUpdate(); })} onsettings={() => (screen = { name: 'settings' })} onopen={(id) => (screen = { name: 'reader', id, path: null })} />
+  <Library bind:this={lib} {updateReady} onapply={() => void importRunning().then((busy) => { if (!busy) applyUpdate(); })} onsettings={() => (screen = { name: 'settings' })} onopen={(id) => (screen = { name: 'reader', id, path: null })} />
 {/if}
 
 <div class="top-inset" data-testid="top-inset" class:reader={screen.name === 'reader'}></div>

@@ -334,7 +334,8 @@
     if (onKey(e.key, { ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, shift: e.shiftKey }) === 'search') e.preventDefault();
   }
 
-  async function back() {
+  // Leave the reader as the back button does (flush progress, clear activeBookId); App also calls it when files arrive.
+  export async function exit() {
     try { await tracker?.flush(); } catch { /* best effort */ }
     await setSetting('activeBookId', null).catch(() => {});
     tellSw({ type: 'active-book', id: null });
@@ -359,7 +360,7 @@
 <div class="reader" class:desk={layout.desktop} data-testid="reader" data-book-id={bookId} data-path={path} data-agent={agent} data-overlay={layout.desktop || overlayOpen ? 'open' : 'closed'}
   hidden={notice !== 'none'} style:--panel-w={layout.desktop && dockOpen ? `${panelApplied}px` : '0px'}>
   <iframe bind:this={iframe} data-testid="reader-frame" title="문서" inert={sheet}></iframe>
-  <div role="presentation" bind:this={overlayEl} onpointerdown={pokeOverlay} onfocusin={onOverlayFocusIn} onfocusout={onOverlayFocusOut} inert={sheet}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={back}>
+  <div role="presentation" bind:this={overlayEl} onpointerdown={pokeOverlay} onfocusin={onOverlayFocusIn} onfocusout={onOverlayFocusOut} inert={sheet}><Overlay open={overlayOpen} {title} {pageInfo} pct={curPct} onback={exit}>
     {#snippet topActions()}
       {#if nMissing}
         <button type="button" class="icon-btn badge warn" data-testid="issue-badge" aria-label={`누락 ${nMissing}`} bind:this={btnIssues} onclick={openIssues}><Icon name="warning" size={16} /><span class="full">누락{' '}</span>{nMissing}</button>
