@@ -56,13 +56,14 @@ function start(): void {
   send({ type: 'ready', path: bookPath(), title: document.title });
 
   let stopRestore = () => {};
+  let moved = false; // a shell scroll-to (bookmark jump, handle, top/bottom) wins over the pending restore (§6.7-3)
   const find = (query: string, snippet: string) => { const ok = findAndReveal(query, snippet); if (ok) stopRestore(); return ok; };
 
   addEventListener('message', (e) => {
     if (e.source !== parent || e.origin !== location.origin) return;
     const p = parseShellMessage(e.data);
     if (!p.ok) return;
-    if (p.msg.type === 'scroll-to') { scrollToRatio(el, p.msg.ratio); return; }
+    if (p.msg.type === 'scroll-to') { moved = true; stopRestore(); scrollToRatio(el, p.msg.ratio); return; }
     if (p.msg.type === 'set-scale') {
       const r = metrics(el).ratio;
       currentScale = p.msg.textScale;
@@ -85,7 +86,7 @@ function start(): void {
       if (!find(query, snippet)) {
         let touched = false;
         const off = onUserInput(() => { touched = true; });
-        whenStable(() => { off(); if (!touched) find(query, snippet); });
+        whenStable(() => { off(); if (!touched && !moved) find(query, snippet); });
       }
     }
   });

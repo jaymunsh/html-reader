@@ -113,11 +113,11 @@
     if (near) { removeBookmark(near); return; }
     const b = newBookmark(bookId, path, curRatio, Date.now());
     marks = [b, ...marks];
-    void putBookmark(b).catch(() => {});
+    void putBookmark(b).catch(() => { marks = marks.filter((x) => x.id !== b.id); }); // failed write: the button tells the truth
   }
   function removeBookmark(b: Bookmark) {
     marks = marks.filter((x) => x.id !== b.id);
-    void deleteBookmark(b.id).catch(() => {});
+    void deleteBookmark(b.id).catch(() => { marks = [...marks, b].sort((x, y) => y.createdAt - x.createdAt); });
   }
   function jump(b: Bookmark) {
     if (b.path === path) session?.post({ type: 'scroll-to', ratio: b.scrollRatio });
@@ -125,14 +125,16 @@
     if (!layout.desktop) closePanel();
   }
   let renameInput = $state('');
-  function startRename(b: Bookmark) { renameInput = b.label; renaming = b; }
-  function saveRename() {
+  let renameFailed = $state(false);
+  function startRename(b: Bookmark) { renameInput = b.label; renameFailed = false; renaming = b; }
+  // Closes only after the write succeeds (like the library rename); on failure the dialog stays with an inline error.
+  async function saveRename() {
     const b = renaming;
-    renaming = null;
     if (!b) return;
     const next = { ...b, label: normalizeLabel(renameInput, defaultBookmarkLabel(b.path, b.scrollRatio)) };
+    try { await putBookmark(next); } catch { renameFailed = true; return; }
     marks = marks.map((x) => (x.id === b.id ? next : x));
-    void putBookmark(next).catch(() => {});
+    if (renaming === b) renaming = null;
   }
 
   // Every navigation resets the pending restore; getInit takes it once, only for its page.
@@ -405,8 +407,9 @@
   {#if renaming}
     <!-- Outside the panel: the panel is inert while it is up. Focus returns to the row's ⋯ button (focused by the menu's close). -->
     <Dialog title="북마크 이름" testid="rename-dialog" oncancel={() => (renaming = null)}>
-      <form onsubmit={(e) => { e.preventDefault(); saveRename(); }}>
-        <input class="rename" data-testid="rename-input" data-autofocus aria-label="북마크 이름" maxlength={100} bind:value={renameInput} />
+      <form onsubmit={(e) => { e.preventDefault(); void saveRename(); }}>
+        <input class="rename" data-testid="rename-input" data-autofocus aria-label="북마크 이름" maxlength={100} bind:value={renameInput} oninput={() => (renameFailed = false)} />
+        {#if renameFailed}<p class="err" data-testid="rename-save-error" role="alert">이름을 저장하지 못했습니다.</p>{/if}
         <div class="actions">
           <button type="submit" class="primary" data-testid="rename-save">저장</button>
           <button type="button" onclick={() => (renaming = null)}>취소</button>
@@ -458,6 +461,7 @@
     width: 100%; box-sizing: border-box; min-height: 48px; margin: 8px 0 20px; padding: 0 12px; font: inherit; font-size: 16px;
     color: var(--text); background: var(--bg-app); border: 1px solid var(--hairline); border-radius: var(--r-control);
   }
+  .err { margin: -12px 0 12px; font-size: 14px; color: var(--warn-fg); }
   iframe { position: fixed; top: var(--sat); left: 0; right: var(--panel-w); bottom: 0; width: calc(100% - var(--panel-w)); height: calc(100% - var(--sat)); border: 0; display: block; }
   .desk iframe { top: calc(var(--sat) + 48px); height: calc(100% - var(--sat) - 48px); }
 </style>
