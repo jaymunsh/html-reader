@@ -29,7 +29,7 @@
   let flowModal = $state(false);
   let loaded = $state(false);
 
-  type Dlg = 'ios' | 'temp' | 'safety' | { del: Book } | { rename: Book };
+  type Dlg = 'ios' | 'temp' | 'safety' | 'share-failed' | { del: Book } | { rename: Book };
   let dlg = $state<Dlg | null>(null);
   let answer: ((ok: boolean) => void) | null = null;
   // One dialog at a time: later asks wait for the open one to be answered.
@@ -107,6 +107,9 @@
     batches = batches.then(() => gateAndImport(files)).catch(() => {});
     return batches;
   }
+
+  // The SW could not take a shared file (§7.5): shown through the same one-dialog queue.
+  export function shareFailed() { return ask('share-failed'); }
 
   async function gateAndImport(files: File[]) {
     if (!files.length) return;
@@ -230,6 +233,11 @@
 {:else if dlg === 'safety'}
   <Dialog title="신뢰하는 문서만 가져오세요" testid="safety-notice">
     <p>직접 만들었거나 신뢰하는 문서만 가져오세요. 문서 안의 스크립트는 이 앱의 저장 데이터에 접근할 수 있습니다.</p>
+    <div class="actions"><button type="button" class="primary" data-testid="confirm-ok" onclick={() => reply(true)}>확인</button></div>
+  </Dialog>
+{:else if dlg === 'share-failed'}
+  <Dialog title="공유 실패" testid="share-failed-notice">
+    <p>공유받은 파일을 열지 못했습니다. 앱에서 직접 가져오기를 이용하세요.</p>
     <div class="actions"><button type="button" class="primary" data-testid="confirm-ok" onclick={() => reply(true)}>확인</button></div>
   </Dialog>
 {:else if ren}

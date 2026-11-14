@@ -29,6 +29,10 @@ export default defineConfig({
         ],
         file_handlers: [{ action: '/', accept: { 'application/zip': ['.zip'], 'text/html': ['.html', '.htm'] } }],
         launch_handler: { client_mode: ['focus-existing', 'auto'] },
+        share_target: {
+          action: '/__app/share-target', method: 'POST', enctype: 'multipart/form-data',
+          params: { files: [{ name: 'file', accept: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream', '.zip', 'text/html', '.html'] }] },
+        },
       },
     }),
   ],

@@ -4,6 +4,7 @@ import { getSetting, recordIssue, setSetting } from '../lib/storage';
 import { pickContext } from './context';
 import { decideRoute } from './route';
 import { invalidateBook, serveBookFile } from './serve';
+import { handleShareTarget } from './share';
 
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<string | { url: string; revision: string | null }> };
 
@@ -87,6 +88,8 @@ async function handle(event: FetchEvent): Promise<Response> {
   });
 
   switch (route.kind) {
+    case 'share-target':
+      return request.method === 'POST' ? handleShareTarget(request) : Response.redirect(new URL('/', url.origin).href, 302);
     case 'reader-asset':
     case 'app-asset':
       return (await matchPrecache(url.pathname)) ?? fetch(request);

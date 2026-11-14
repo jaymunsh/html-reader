@@ -1,4 +1,5 @@
 import { splitBookUrl } from '../lib/path';
+import { SHARE_PATH } from './share';
 
 export interface RouteInput {
   url: URL;
@@ -17,7 +18,8 @@ export type Route =
   | { kind: 'external'; bookId: string }
   | { kind: 'app-asset' }
   | { kind: 'app-shell' }
-  | { kind: 'passthrough' };
+  | { kind: 'passthrough' }
+  | { kind: 'share-target' };
 
 function safeDecode(s: string): string {
   try {
@@ -30,11 +32,13 @@ function safeDecode(s: string): string {
 /** §5.2 — decides how to serve a request. */
 export function decideRoute(i: RouteInput): Route {
   // i.method is intentionally ignored: there is no server, and book context always maps into the book.
+  // The share target is decided first, for any method (the SW handles POST and sends anything else to /).
   const { url, ctxBookId } = i;
   if (url.origin !== i.selfOrigin) {
     return ctxBookId ? { kind: 'external', bookId: ctxBookId } : { kind: 'passthrough' };
   }
   const p = url.pathname;
+  if (p === SHARE_PATH) return { kind: 'share-target' };
   if (p.startsWith('/__reader/')) return { kind: 'reader-asset' };
 
   const book = splitBookUrl(p);

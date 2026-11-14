@@ -83,3 +83,8 @@ test('client 없는 /__app/·/__reader/ 하위 요청은 book 맥락이 아니�
   // client가 있으면 기존 판정 유지
   expect(c({ targetPathname: '/__app/x.js', client: { pathname: '/book/ab/i.html', frameType: 'nested', type: 'window' } })).toEqual({ bookId: 'ab', useFallback: false });
 });
+test('share target은 맥락보다 먼저, 메서드와 무관 (P4-K9)', () => {
+  expect(r('/__app/share-target', { method: 'POST', nav: true, dest: 'document' })).toEqual({ kind: 'share-target' });
+  expect(r('/__app/share-target', { method: 'POST', nav: true, dest: 'document', ctx: 'ab' })).toEqual({ kind: 'share-target' });
+  expect(r('/__app/share-target', { nav: true, dest: 'document' })).toEqual({ kind: 'share-target' });
+});

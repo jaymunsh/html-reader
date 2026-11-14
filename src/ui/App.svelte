@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { initLaunch, type LaunchQueueLike } from '../lib/launch';
+  import { initLaunch, takePendingShare, type LaunchQueueLike } from '../lib/launch';
   import { cleanupOrphans, importRunning } from '../lib/storage';
   import Library from './library/Library.svelte';
   import { setScreen } from './chrome';
@@ -39,9 +39,26 @@
       else if (screen.name !== 'library') screen = { name: 'library' };
       await tick(); // the library mounts (and binds) only on its screen
     } finally { receiving = false; }
-    void lib?.enqueue(files);
+    if (!lib) return false;
+    await lib.enqueue(files); // settles once the batch is done (imported, failed or cancelled)
+    return true;
   }
   onMount(() => initLaunch((window as unknown as { launchQueue?: LaunchQueueLike }).launchQueue, (files) => void receiveFiles(files)));
+
+  // Share target (§7.5): the SW sends us to /?import=pending|failed. Files left in the inbox by a closed app are
+  // imported on any start, whatever the query; the inbox is emptied only once their import has settled.
+  onMount(() => {
+    const q = new URLSearchParams(location.search);
+    const failed = q.get('import') === 'failed';
+    if (q.has('import')) { q.delete('import'); const s = q.toString(); history.replaceState(null, '', s ? `/?${s}` : '/'); } // ?open= stays for clean()
+    const run = async () => {
+      if (failed) { void lib?.shareFailed(); return; }
+      const { files, done } = await takePendingShare();
+      if (!files.length) return;
+      if (await receiveFiles(files)) await done();
+    };
+    void run().catch(() => {}).finally(() => { document.documentElement.dataset.share = 'done'; });
+  });
 
   $effect(() => { document.documentElement.dataset.screen = screen.name; setScreen(screen.name); });
 
