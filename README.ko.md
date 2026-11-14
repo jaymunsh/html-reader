@@ -6,6 +6,8 @@
 
 <p align="center">ZIP으로 묶인 HTML 문서를 브라우저에서 연 것처럼 그대로 읽는 오프라인 PWA</p>
 
+<p align="center"><a href="https://html-reader-kohl.vercel.app"><b>앱 열기 →</b></a></p>
+
 <p align="center"><a href="README.md">English</a> · <b>한국어</b></p>
 
 ---

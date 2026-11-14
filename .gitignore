@@ -9,3 +9,5 @@ public/__reader/
 test-results/
 playwright-report/
 tests/fixtures/big.zip
+.vercel
+.env*

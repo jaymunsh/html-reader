@@ -6,6 +6,8 @@
 
 <p align="center">An offline PWA that reads zipped HTML documents exactly as a browser would render them</p>
 
+<p align="center"><a href="https://html-reader-kohl.vercel.app"><b>Open the app →</b></a></p>
+
 <p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
 
 ---
