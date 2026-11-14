@@ -39,12 +39,14 @@
   let renameInput = $state('');
   const check = $derived(validateTitle(renameInput));
   const dupName = $derived(check.ok && books.some((b) => b.id !== ren?.id && b.title === check.title));
-  function startRename(b: Book) { renameInput = b.title; void ask({ rename: b }); }
+  let saveFailed = $state(false);
+  function startRename(b: Book) { renameInput = b.title; saveFailed = false; void ask({ rename: b }); }
+  // The dialog closes only once the write has succeeded; a failure keeps it open for a retry.
   async function saveRename() {
     const r = ren, c = check;
     if (!r || !c.ok) return;
+    try { await updateBook(r.id, { title: c.title }); } catch { saveFailed = true; return; }
     reply(true);
-    await updateBook(r.id, { title: c.title }).catch(() => {});
     await refresh();
   }
   function reply(ok: boolean) { dlg = null; answer?.(ok); answer = null; }
@@ -211,9 +213,10 @@
 {:else if ren}
   <Dialog title="이름 바꾸기" testid="rename-dialog" oncancel={() => reply(false)}>
     <form onsubmit={(e) => { e.preventDefault(); void saveRename(); }}>
-      <input class="rename" data-testid="rename-input" data-autofocus aria-label="문서 이름" aria-invalid={!check.ok} bind:value={renameInput}
+      <input class="rename" data-testid="rename-input" data-autofocus aria-label="문서 이름" aria-invalid={!check.ok} bind:value={renameInput} oninput={() => (saveFailed = false)}
         onfocus={(e) => e.currentTarget.select()} />
       {#if !check.ok}<p class="err" data-testid="rename-error" role="alert">{check.reason === 'empty' ? '이름을 입력해 주세요.' : '이름은 100자까지 쓸 수 있습니다.'}</p>
+      {:else if saveFailed}<p class="err" data-testid="rename-save-error" role="alert">이름을 저장하지 못했습니다.</p>
       {:else if dupName}<p class="err" data-testid="dup-name-warning" role="status">같은 이름의 문서가 이미 있습니다.</p>{/if}
       <div class="actions">
         <button type="submit" class="primary" data-testid="rename-save" disabled={!check.ok}>저장</button>
