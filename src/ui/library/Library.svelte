@@ -11,6 +11,11 @@
   import ImportFlow from './ImportFlow.svelte';
   import Dialog from './Dialog.svelte';
   import { layout } from '../layout.svelte';
+  import { filterBooks, sortBooks, type SortKey } from '../../lib/library-sort';
+
+  const SORTS: [SortKey, string][] = [['recent', '최근 읽음'], ['name', '이름'], ['progress', '진행률'], ['imported', '가져온 날짜']];
+  let sort = $state<SortKey>('recent');
+  let query = $state('');
 
   let books = $state<Book[]>([]);
   let issues = $state(new Map<string, Issue[]>());
@@ -56,13 +61,19 @@
     const im = new Map<string, Issue[]>();
     for (const i of iss) (im.get(i.bookId) ?? im.set(i.bookId, []).get(i.bookId)!).push(i);
     issues = im;
-    books = all.sort((a, b) => (b.lastOpenedAt || b.importedAt) - (a.lastOpenedAt || a.importedAt));
+    books = all;
     const m = new Map<string, Map<string, PageProgress>>();
     for (const p of prog) (m.get(p.bookId) ?? m.set(p.bookId, new Map()).get(p.bookId)!).set(p.path, p);
     progress = m;
     loaded = true;
   }
+  const shown = $derived.by(() => {
+    const pcts = new Map(books.map((b) => [b.id, bookProgress(b.pagePaths, progress.get(b.id) ?? new Map()).pct]));
+    return sortBooks(filterBooks(books, query), sort, pcts);
+  });
+  function pick(k: SortKey) { sort = k; void setSetting('librarySort', k).catch(() => {}); }
   onMount(() => {
+    void getSetting('librarySort').then((v) => { sort = v; }).catch(() => {});
     void refresh();
     // A file dropped anywhere must never make the browser navigate to it.
     const stop = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); };
@@ -158,13 +169,22 @@
       <button type="button" class="icon-btn settings" data-testid="settings-button" aria-label="설정" onclick={onsettings}><Icon name="settings" /></button>
     </header>
     {#if books.length}
+      <div class="chips" role="group" aria-label="정렬">
+        {#each SORTS as [k, label] (k)}
+          <button type="button" class="chip" data-testid="sort-chip" data-sort={k} aria-pressed={sort === k} onclick={() => pick(k)}>{label}</button>
+        {/each}
+      </div>
+    {/if}
+    {#if shown.length}
       <div class="list">
-        {#each books as book (book.id)}
+        {#each shown as book (book.id)}
           {@const bp = bookProgress(book.pagePaths, progress.get(book.id) ?? new Map())}
           {@const bi = issues.get(book.id) ?? []}
           <BookCard {book} pct={bp.pct} readCount={bp.readCount} missing={missingCount(bi)} online={bi.some((i) => i.kind === 'external')} onopen={open} ondelete={(b) => void ask({ del: b })} onrename={startRename} />
         {/each}
       </div>
+    {:else if books.length}
+      <p class="nomatch" role="status">일치하는 문서가 없습니다</p>
     {:else if loaded}
       <div class="empty">
         <span class="empty-icon"><Icon name="folder" size={32} /></span>
@@ -174,13 +194,15 @@
   </div>
   <div class="bar" data-bar>
     <div class="bar-in">
-      <!-- Left: the search input's place (P3-8); shows the import progress meanwhile. -->
+      <!-- Left: library search; the import progress replaces it meanwhile (query and filter are kept). -->
       <div class="slot">
         {#if importing}
           <div class="progress" data-testid="import-progress" role="status">
             <span>가져오는 중… {pct}%</span>
             <i><b style:transform={`scaleX(${pct / 100})`}></b></i>
           </div>
+        {:else}
+          <input type="search" class="search" data-testid="library-search" placeholder="서재 검색" aria-label="서재 검색" bind:value={query} />
         {/if}
       </div>
       <button type="button" class="import" data-testid="import-button" onclick={() => input.click()}><Icon name="plus" size={20} />가져오기</button>
@@ -251,6 +273,18 @@
     color: var(--text); background: var(--bg-app); border: 1px solid var(--hairline); border-radius: var(--r-control);
   }
   .err { margin: 0 0 12px; font-size: 14px; color: var(--warn-fg); }
+  .chips { display: flex; gap: 8px; margin: 0 0 14px; overflow-x: auto; scrollbar-width: none; }
+  .chip {
+    flex: none; min-height: 44px; padding: 0 14px; border: 0; border-radius: var(--r-chip); background: var(--surface); color: var(--text-2);
+    box-shadow: var(--shadow-card); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .chip[aria-pressed='true'] { background: var(--accent); color: var(--surface); }
+  .chip:focus-visible, .search:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .search {
+    width: 100%; max-width: 360px; box-sizing: border-box; min-height: 44px; padding: 0 12px; font: inherit; font-size: 16px;
+    color: var(--text); background: var(--bg-app); border: 1px solid var(--hairline); border-radius: var(--r-control);
+  }
+  .nomatch { margin: 48px 0; text-align: center; font-size: 15px; color: var(--text-3); }
   .list { display: flex; flex-direction: column; gap: 10px; }
   .desk .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
   .empty { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 72px 24px; text-align: center; }
