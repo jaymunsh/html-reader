@@ -18,9 +18,9 @@ export async function handleShareTarget(request: Request, cacheStorage: CacheSto
   let cache: Cache | undefined;
   try {
     cache = await cacheStorage.open(SHARE_CACHE);
-    const now = Date.now();
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; // unique per POST; Cache keys keep insertion order, which takePendingShare reads
     for (const [i, f] of files.entries()) {
-      const key = `/__share/${now}-${i}`;
+      const key = `/__share/${stamp}-${i}`;
       await cache.put(key, new Response(f, { headers: { 'Content-Type': f.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(f.name) } }));
       saved.push(key);
     }

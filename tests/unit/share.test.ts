@@ -84,3 +84,9 @@ test('cache.put이 실패하면 저장한 것을 지우고 /?import=failed', asy
   expect([res.status, res.headers.get('Location')]).toEqual([303, '/?import=failed']);
   expect(store.size).toBe(0);
 });
+
+test('PK 매직으로 시작하면 본문에 <html이 있어도 .html을 붙이지 않는다', async () => {
+  const { api, store } = fakeCaches();
+  store.set('/__share/1-0', new Response('PK\x03\x04 <html>', { headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': '' } }));
+  expect((await takePendingShare(api)).files.map((f) => f.name)).toEqual(['shared-1']);
+});

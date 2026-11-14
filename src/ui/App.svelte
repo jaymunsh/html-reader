@@ -19,7 +19,7 @@
   let updateReady = $state(false);
   onMount(() => watchForUpdate(() => { updateReady = true; }));
 
-  let receiving = false; // files are on their way to the library: no update reload before their import takes the lock
+  let receiving = 0; // files are on their way to the library: no update reload before their import takes the lock
   function toLibrary() {
     clean();
     screen = { name: 'library' };
@@ -33,12 +33,12 @@
   let lib = $state<Library>();
   let reader = $state<{ exit(): Promise<void> }>();
   async function receiveFiles(files: File[]) {
-    receiving = true;
+    receiving++;
     try {
       if (screen.name === 'reader' && reader) await reader.exit(); // flushes progress, clears activeBookId, onexit → library
-      else if (screen.name !== 'library') screen = { name: 'library' };
+      else if (screen.name !== 'library') toLibrary(); // also drops ?open=; `receiving` blocks the update reload
       await tick(); // the library mounts (and binds) only on its screen
-    } finally { receiving = false; }
+    } finally { receiving--; }
     if (!lib) return false;
     await lib.enqueue(files); // settles once the batch is done (imported, failed or cancelled)
     return true;
