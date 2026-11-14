@@ -144,10 +144,10 @@
     const d = del;
     reply(true);
     if (!d) return;
-    const i = books.findIndex((b) => b.id === d.id);
+    const i = shown.findIndex((b) => b.id === d.id);
     await deleteBook(d.id); await refresh(); await tick();
     // Focus the next card's menu, else the previous one's, else the import button (the deleted card's menu is gone).
-    const near = books[i] ?? books[i - 1];
+    const near = shown[i] ?? shown[i - 1];
     const to = (near && document.querySelector<HTMLElement>(`[data-book-id="${near.id}"] [data-testid=book-menu]`))
       || document.querySelector<HTMLElement>('[data-testid=import-button]');
     to?.focus({ preventScroll: true });
