@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
-  import { getBook, getBookFiles, getProgress, getSetting, listIssues, missingCount, setSetting, updateBook, type Book, type Issue, type PageProgress } from '../../lib/storage';
+  import { deleteBookmark, getBook, getBookFiles, getProgress, getSetting, listBookmarks, listIssues, missingCount, putBookmark, setSetting, updateBook, type Book, type Bookmark, type Issue, type PageProgress } from '../../lib/storage';
+  import { defaultBookmarkLabel, findNearBookmark, newBookmark, normalizeLabel } from '../../lib/bookmarks';
   import { ProgressTracker, bookProgress, formatPageInfo } from '../../lib/progress';
   import { neighbor, orderedPages } from '../../lib/file-tree';
   import ProgressLine from './ProgressLine.svelte';
@@ -15,6 +16,8 @@
   import IssuesSheet from './IssuesSheet.svelte';
   import FilesTab from './FilesTab.svelte';
   import SearchPanel from './SearchPanel.svelte';
+  import BookmarksTab from './BookmarksTab.svelte';
+  import Dialog from '../library/Dialog.svelte';
   import Sheet from '../Sheet.svelte';
   import { layout } from '../layout.svelte';
   import { createSession, pendingRestore, type AgentState } from './session';
@@ -74,7 +77,9 @@
     issuesOpen = false; issuesHold?.(); issuesHold = null;   // Sheet returns focus to the badge
   }
   let searchOpen = $state(false);
-  const sheet = $derived((!layout.desktop && (sheetOpen || searchOpen)) || issuesOpen);
+  let renaming = $state<Bookmark | null>(null);
+  // A modal is up: the document and overlay are inert and the shortcuts do nothing (the rename dialog also blocks the panel).
+  const sheet = $derived((!layout.desktop && (sheetOpen || searchOpen)) || issuesOpen || !!renaming);
   let sheetHold: (() => void) | null = null;
   function openSheet() { sheetOpen = true; sheetHold ??= holdOverlay('panel'); }
   function closePanel() {
@@ -100,6 +105,36 @@
     if (p === path) session?.post({ type: 'find', query, snippet });
     else nav(p, { find: { query, snippet } });
   }
+  // Bookmarks (spec §7.3): the in-memory list mirrors IDB; the button shows a bookmark within 2% of the current position.
+  let marks = $state<Bookmark[]>([]);
+  const near = $derived(findNearBookmark(marks, path, curRatio));
+  function toggleBookmark() {
+    if (agent === 'limited' || !path) return;
+    if (near) { removeBookmark(near); return; }
+    const b = newBookmark(bookId, path, curRatio, Date.now());
+    marks = [b, ...marks];
+    void putBookmark(b).catch(() => {});
+  }
+  function removeBookmark(b: Bookmark) {
+    marks = marks.filter((x) => x.id !== b.id);
+    void deleteBookmark(b.id).catch(() => {});
+  }
+  function jump(b: Bookmark) {
+    if (b.path === path) session?.post({ type: 'scroll-to', ratio: b.scrollRatio });
+    else nav(b.path, { bookmark: { scrollRatio: b.scrollRatio } });
+    if (!layout.desktop) closePanel();
+  }
+  let renameInput = $state('');
+  function startRename(b: Bookmark) { renameInput = b.label; renaming = b; }
+  function saveRename() {
+    const b = renaming;
+    renaming = null;
+    if (!b) return;
+    const next = { ...b, label: normalizeLabel(renameInput, defaultBookmarkLabel(b.path, b.scrollRatio)) };
+    marks = marks.map((x) => (x.id === b.id ? next : x));
+    void putBookmark(next).catch(() => {});
+  }
+
   // Every navigation resets the pending restore; getInit takes it once, only for its page.
   const pending = pendingRestore();
   function nav(p: string, restore?: Restore) {
@@ -193,6 +228,7 @@
     titles = files?.titles ?? {};
     sourceName = b.sourceName;
     const progress = await getProgress(bookId);
+    marks = await listBookmarks(bookId).catch(() => []);
     if (gone) return;
     tracker = new ProgressTracker(bookId, progress);
     refreshBook();
@@ -275,6 +311,7 @@
     'zoom-in': () => zoomBy(1),
     'zoom-out': () => zoomBy(-1),
     search: openSearch,
+    bookmark: toggleBookmark,
     top: () => session?.post({ type: 'scroll-to', ratio: 0 }),
     bottom: () => session?.post({ type: 'scroll-to', ratio: 1 }),
   };
@@ -328,9 +365,11 @@
       {#if agent === 'limited'}<span class="badge info" data-testid="limited-badge" role="img" aria-label="제한 모드"><span class="ico"><Icon name="warning" size={16} /></span><span class="full">제한 모드</span></span>{/if}
       {#if !layout.desktop}
         <button type="button" class="icon-btn" data-testid="btn-search" aria-label="검색" aria-expanded={searchOpen} bind:this={btnSearch} onclick={openSearch}><Icon name="search" /></button>
+        {@render bm()}
         <button type="button" class="icon-btn" data-testid="btn-panel" aria-label="파일·북마크" aria-expanded={sheetOpen} bind:this={btnPanel} onclick={openSheet}><Icon name="menu" /></button>
       {:else}
         <SearchPanel bind:this={searchBar} {bookId} variant="dropdown" onPick={onSearchPick} onClose={() => {}} />
+        {@render bm()}
         {@render pn()}
         {#if panelReady && !dockOpen}
           <button type="button" class="icon-btn" data-testid="panel-toggle" aria-label="패널 펼치기" aria-expanded="false" onclick={openDock}><Icon name="panel" /></button>
@@ -354,14 +393,26 @@
   {/if}
   {#if panelReady}
     <Panel open={panelOpen} bind:tab={panelTab} onClose={closePanel} bind:width={panelWidth} max={panelMax}
-      onWidthCommit={(w) => void setSetting('panelWidth', w).catch(() => {})} onEscape={() => iframe?.focus()} blocked={issuesOpen}>
+      onWidthCommit={(w) => void setSetting('panelWidth', w).catch(() => {})} onEscape={() => iframe?.focus()} blocked={issuesOpen || !!renaming}>
       {#snippet files()}
         {#if pages.length}
           <FilesTab open={panelOpen} {sourceName} pagePaths={pages} {titles} {progress} current={path} onpick={pick} />
         {/if}
       {/snippet}
-      {#snippet bookmarks()}<p class="empty">북마크가 없습니다</p>{/snippet}
+      {#snippet bookmarks()}<BookmarksTab list={marks} onpick={jump} ondelete={removeBookmark} onrename={startRename} />{/snippet}
     </Panel>
+  {/if}
+  {#if renaming}
+    <!-- Outside the panel: the panel is inert while it is up. Focus returns to the row's ⋯ button (focused by the menu's close). -->
+    <Dialog title="북마크 이름" testid="rename-dialog" oncancel={() => (renaming = null)}>
+      <form onsubmit={(e) => { e.preventDefault(); saveRename(); }}>
+        <input class="rename" data-testid="rename-input" data-autofocus aria-label="북마크 이름" maxlength={100} bind:value={renameInput} />
+        <div class="actions">
+          <button type="submit" class="primary" data-testid="rename-save">저장</button>
+          <button type="button" onclick={() => (renaming = null)}>취소</button>
+        </div>
+      </form>
+    </Dialog>
   {/if}
   {#if !layout.desktop && overlayOpen && !sheetOpen && agent === 'ready' && scrollable}
     <ScrollHandle ratio={curRatio} label={fileName} onSeek={(r) => session?.post({ type: 'scroll-to', ratio: r })} {onDragState} />
@@ -370,6 +421,13 @@
   {#if hint && !layout.desktop}<HintToast ondismiss={dismissHint} />{/if}
   {#if showLine && !layout.desktop}<ProgressLine pct={curPct} hidden={overlayOpen && !layout.desktop} />{/if}
 </div>
+
+<!-- Hidden in limited mode (no scroll position; P3-K11: the 320px bar has no room for it beside the badge). -->
+{#snippet bm()}
+  {#if agent !== 'limited'}
+    <button type="button" class="icon-btn" data-testid="btn-bookmark" aria-label="북마크" aria-pressed={!!near} onclick={toggleBookmark}><Icon name={near ? 'bookmark-filled' : 'bookmark'} /></button>
+  {/if}
+{/snippet}
 
 {#snippet pn()}
   <button type="button" class="icon-btn" data-testid="btn-prev" aria-label="이전 쪽" disabled={!prevPath} onclick={() => go(-1)}><Icon name="prev" /></button>
@@ -396,7 +454,10 @@
   }
   .zb { font-size: 14px; font-weight: 600; }
   .zv { min-width: 40px; text-align: center; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-  .empty { margin: 32px 16px; text-align: center; color: var(--text-3); }
+  .rename {
+    width: 100%; box-sizing: border-box; min-height: 48px; margin: 8px 0 20px; padding: 0 12px; font: inherit; font-size: 16px;
+    color: var(--text); background: var(--bg-app); border: 1px solid var(--hairline); border-radius: var(--r-control);
+  }
   iframe { position: fixed; top: var(--sat); left: 0; right: var(--panel-w); bottom: 0; width: calc(100% - var(--panel-w)); height: calc(100% - var(--sat)); border: 0; display: block; }
   .desk iframe { top: calc(var(--sat) + 48px); height: calc(100% - var(--sat) - 48px); }
 </style>

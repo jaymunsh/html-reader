@@ -27,7 +27,7 @@
   onMount(() => {
     (el.querySelector<HTMLElement>('[data-autofocus]') ?? el.querySelector<HTMLElement>('button') ?? el).focus({ preventScroll: true });
     return () => void tick().then(() => {
-      if (document.querySelector('[role=dialog]')) return;              // the next dialog took focus
+      if (document.querySelector('[role=dialog]:not([inert])')) return; // the next dialog took focus (a closed Sheet is inert)
       (back?.isConnected ? back : document.querySelector<HTMLElement>('[data-testid=import-button]'))
         ?.focus({ preventScroll: true, focusVisible: kb } as FocusOptions);
     });

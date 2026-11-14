@@ -42,12 +42,13 @@
   }
   .bottom.closed { transform: translateY(100%); }
   .back { flex: none; }
-  .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-  /* Too narrow: the title gives way first (basis 0), then the page info; the controls never shrink. */
+  .title { flex: 1; min-width: 32px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  /* Too narrow: the title gives way first (basis 0, down to 32px so it never vanishes, P3-K11), then the page info; the controls never shrink. */
   .page-info { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--text-3); white-space: nowrap; }
   .pbar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; pointer-events: none; }
   .pbar i { display: block; width: 100%; height: 100%; background: var(--accent); transform-origin: left; }
-  /* The actions may shrink only through the PC search input (it opts in); every other control keeps its size. */
-  .actions { display: flex; flex: 0 1 auto; min-width: 0; gap: 4px; }
+  /* The actions may shrink only through the PC search input (it opts in, down to its min-width); every other control keeps
+     its size. The default min-width (min-content) is that floor: the page info gives way before any control is squeezed. */
+  .actions { display: flex; flex: 0 1 auto; gap: 4px; }
   .actions > :global(*) { flex-shrink: 0; }
 </style>

@@ -10,7 +10,7 @@ async function controlsClear(page: Page, search: 'search-input' | 'search-toggle
     els.filter((e) => e.getClientRects().length).map((e) => {
       const r = e.getBoundingClientRect(); return { id: e.getAttribute('data-testid'), tag: e.tagName, left: r.left, right: r.right, w: r.width, h: r.height };
     }));
-  expect(boxes.map((b) => b.id)).toEqual(expect.arrayContaining(['reader-back', 'issue-badge', search, 'btn-prev', 'zoom-out', 'zoom-in', 'btn-next']));
+  expect(boxes.map((b) => b.id)).toEqual(expect.arrayContaining(['reader-back', 'issue-badge', search, 'btn-bookmark', 'btn-prev', 'zoom-out', 'zoom-in', 'btn-next']));
   for (const b of boxes) {
     expect(b.left, `${b.id} left`).toBeGreaterThanOrEqual(0);
     expect(b.right, `${b.id} right`).toBeLessThanOrEqual(px);

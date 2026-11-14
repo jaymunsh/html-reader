@@ -134,6 +134,7 @@
   .dd .field { position: relative; width: 100%; height: 36px; }
   .dd .field::before { content: ''; position: absolute; inset: -4px 0; } /* 44px tall target */
   .dd input { position: relative; font-size: 14px; } /* painted above the label's hit-area strip */
+  .dd input { width: 0; } /* no intrinsic width (it still flexes): the dropdown's floor in the bar is its 100px min-width */
   kbd { flex: none; min-width: 20px; padding: 0 4px; box-sizing: border-box; border: 1px solid var(--hairline); border-radius: 6px; background: var(--surface); color: var(--text-3); font: inherit; font-size: 12px; text-align: center; }
   .drop, .expanded .pop {
     background: var(--surface); color: var(--text); border: 1px solid var(--hairline); border-radius: var(--r-control); box-shadow: var(--shadow-card);

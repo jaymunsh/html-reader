@@ -2,15 +2,13 @@
   import type { Book } from '../../lib/storage';
   import Icon from '../icons/Icon.svelte';
   import ProgressRing from './ProgressRing.svelte';
+  import Menu from '../Menu.svelte';
+  import { ymd } from '../../lib/date';
   let { book, pct, readCount, missing = 0, online = false, onopen, ondelete }: {
     book: Book; pct: number; readCount: number; missing?: number; online?: boolean; onopen: (id: string) => void; ondelete: (book: Book) => void;
   } = $props();
   let menu = $state(false);
-  let el: HTMLElement;
-  let menuBtn: HTMLButtonElement;
-
-  const p2 = (n: number) => String(n).padStart(2, '0');
-  const ymd = (t: number) => { const d = new Date(t); return `${d.getFullYear()}.${p2(d.getMonth() + 1)}.${p2(d.getDate())}`; };
+  let el = $state<HTMLElement>();
   function when(t: number): string {
     if (!t) return '안 읽음';
     const m = Math.floor((Date.now() - t) / 60_000);
@@ -39,21 +37,12 @@
     if (swallow) { swallow = false; return; }
     onopen(book.id);
   }
-
-  // A press anywhere outside this card closes its menu.
-  $effect(() => {
-    if (!menu) return;
-    const out = (e: Event) => { if (!el.contains(e.target as Node)) menu = false; };
-    window.addEventListener('pointerdown', out, true);
-    return () => window.removeEventListener('pointerdown', out, true);
-  });
 </script>
 
 <div bind:this={el} class="card" data-testid="book-card" data-book-id={book.id} data-title={book.title} role="button" tabindex="0"
   onclick={click} onpointerdown={down} onpointermove={move} onpointerup={stop} onpointercancel={stop}
   oncontextmenu={(e) => { e.preventDefault(); clearTimeout(timer); menu = true; }}
   onkeydown={(e) => {
-    if (e.key === 'Escape' && menu) { e.preventDefault(); e.stopPropagation(); menu = false; menuBtn.focus(); return; }
     if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onopen(book.id); }
   }}>
   <ProgressRing {pct} />
@@ -68,14 +57,12 @@
       {#if online}<span class="chip info" data-testid="online-badge" aria-label="온라인 필요"><Icon name="cloud" size={14} /></span>{/if}
     </span>
   </span>
-  <button bind:this={menuBtn} type="button" class="icon-btn menu-btn" data-testid="book-menu" aria-label="메뉴" aria-haspopup="menu" aria-expanded={menu}
-    onclick={(e) => { e.stopPropagation(); menu = !menu; }}><Icon name="more" /></button>
-  {#if menu}
-    <div class="menu" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
-      <button type="button" role="menuitem" data-testid="menu-delete"
-        onclick={() => { menu = false; menuBtn.focus(); ondelete(book); }}>삭제</button>
-    </div>
-  {/if}
+  <!-- A press elsewhere on the card is the card's own (it closes the menu and swallows the click). -->
+  <Menu bind:open={menu} testid="book-menu" within={el}>
+    {#snippet children(close)}
+      <button type="button" role="menuitem" class="danger" data-testid="menu-delete" onclick={() => { close(); ondelete(book); }}>삭제</button>
+    {/snippet}
+  </Menu>
 </div>
 
 <style>
@@ -97,20 +84,5 @@
   .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--r-chip); font-size: 12px; font-weight: 600; }
   .chip.warn { background: var(--warn-bg); color: var(--warn-fg); }
   .chip.info { background: var(--info-bg); color: var(--info-fg); }
-  .menu-btn { flex: none; align-self: flex-start; border-radius: var(--r-control); color: var(--text-3); cursor: pointer; }
-  .menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  @media (hover: hover) { .menu-btn:hover { background: var(--bg-app); color: var(--text); } }
-  .menu {
-    position: absolute; right: 8px; top: 54px; z-index: var(--z-popover); min-width: 160px; padding: 6px; box-sizing: border-box;
-    background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--r-control); box-shadow: var(--shadow-card);
-    transform-origin: top right; animation: pop .14s ease-out both;
-  }
-  .menu button {
-    display: block; width: 100%; min-height: 44px; padding: 0 14px; text-align: left; border: 0; border-radius: var(--r-control);
-    background: none; color: var(--danger); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
-  }
-  .menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  @media (hover: hover) { .menu button:hover { background: var(--bg-app); } }
-  @keyframes pop { from { opacity: 0; transform: scale(.94); } }
-  @media (prefers-reduced-motion: reduce) { .card, .menu { transition: none; animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
 </style>
