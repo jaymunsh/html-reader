@@ -26,9 +26,11 @@
   .bar {
     position: fixed; left: 0; right: 0; z-index: var(--z-bar);
     background: var(--bar); -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
-    transition: transform .2s ease, opacity .2s ease; color: var(--text);
+    transition: transform .2s ease, opacity .2s ease, visibility 0s; color: var(--text);
   }
-  .bar.closed { opacity: 0; pointer-events: none; }
+  /* Hidden once the slide-out ends, so no backdrop-filter layer lingers (iOS 26 samples the toolbar tint from fixed bars). */
+  .bar.closed { opacity: 0; pointer-events: none; visibility: hidden; transition: transform .2s ease, opacity .2s ease, visibility 0s linear .2s; }
+  @media (prefers-reduced-motion: reduce) { .bar, .bar.closed { transition: none; } }
   .top {
     top: 0; right: var(--panel-w, 0px); display: flex; container: topbar / inline-size; align-items: center; gap: 8px; min-height: 52px;
     padding: var(--sat) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));

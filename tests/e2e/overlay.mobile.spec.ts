@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { importFixture, openBook, overlaySettled } from './helpers';
 
-const bar = (page: any, id: string) => page.getByTestId(id).evaluate((e: Element) => ({ opacity: getComputedStyle(e).opacity, inert: e.hasAttribute('inert') }));
+const bar = (page: any, id: string) => page.getByTestId(id).evaluate((e: Element) => ({ opacity: getComputedStyle(e).opacity, visibility: getComputedStyle(e).visibility, inert: e.hasAttribute('inert') }));
 const state = (page: any) => page.getByTestId('reader').getAttribute('data-overlay');
 async function open9(page: any) { await page.goto('/'); const id = await importFixture(page, '09-click-handlers.zip'); return openBook(page, id); }
 
@@ -11,11 +11,11 @@ test('빈 곳을 탭하면 열리고 다시 탭하면 닫힌다', async ({ page 
   await f.locator('#plain').tap();
   await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'open');
   await overlaySettled(page);
-  for (const id of ['overlay-top', 'overlay-bottom']) expect(await bar(page, id)).toEqual({ opacity: '1', inert: false });
+  for (const id of ['overlay-top', 'overlay-bottom']) expect(await bar(page, id)).toEqual({ opacity: '1', visibility: 'visible', inert: false });
   await f.locator('#plain').tap();
   await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'closed');
   await overlaySettled(page);
-  for (const id of ['overlay-top', 'overlay-bottom']) expect(await bar(page, id)).toEqual({ opacity: '0', inert: true });
+  for (const id of ['overlay-top', 'overlay-bottom']) expect(await bar(page, id)).toEqual({ opacity: '0', visibility: 'hidden', inert: true });
 });
 
 for (const sel of ['#onclick', '[role=tab] >> nth=1', '#pointer', '#prevent', '#link', '#inp'])
@@ -70,7 +70,7 @@ test('오버레이는 문서 공간을 밀지 않고 화면 끝에 붙는다', a
   expect([bottom.x, Math.round(bottom.y + bottom.height), bottom.width]).toEqual([0, vp.height, vp.width]);
   const css = await page.getByTestId('overlay-top').evaluate((e) => { const s = getComputedStyle(e); return { bf: s.backdropFilter, tp: s.transitionProperty }; });
   expect(css.bf).toContain('blur(22px)');
-  expect(css.tp.split(',').map((s) => s.trim()).every((p) => ['transform', 'opacity'].includes(p))).toBe(true);
+  expect(css.tp.split(',').map((s) => s.trim()).every((p) => ['transform', 'opacity', 'visibility'].includes(p))).toBe(true);
 });
 
 test('닫힌 오버레이는 문서 탭을 가로채지 않는다', async ({ page }) => {
@@ -94,4 +94,14 @@ test('키보드 포커스가 오버레이 안에 있는 동안에는 숨지 않�
   await expect(page.getByTestId('btn-search')).toBeFocused();
   await page.getByTestId('btn-search').evaluate((e: HTMLElement) => e.blur()); // 포커스가 나가면 다시 숨는다
   await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'closed', { timeout: 4000 });
+});
+
+test('모션 줄이기: 오버레이 바는 전환 없이 바로 열리고 닫힌다', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const f = await open9(page);
+  await f.locator('#plain').tap();
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-overlay', 'open');
+  expect(await page.getByTestId('overlay-top').evaluate((e) => getComputedStyle(e).transitionDuration)).toBe('0s');
+  await f.locator('#plain').tap();
+  await expect(page.getByTestId('overlay-top')).toHaveCSS('visibility', 'hidden');
 });
