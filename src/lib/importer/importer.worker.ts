@@ -59,6 +59,7 @@ async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
   // cache entries WebKit dropped when the worker was terminated.
   const bookId = prev?.id ?? newBookId();
   const cacheName = cacheNameFor(bookId, prev ? (parseCacheName(prev.cacheName)?.n ?? 1) + 1 : 1);
+  const pool = createPool(PUT_CONCURRENCY);
   try {
     if (prev) await caches.delete(cacheName); // a leftover of a crashed replace (never the live cache) must not mix in
     const cache = await caches.open(cacheName);
@@ -73,7 +74,6 @@ async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
       const now = Date.now();
       if (now - lastPost > 50 || done >= total) { lastPost = now; post({ type: 'progress', done, total }); }
     };
-    const pool = createPool(PUT_CONCURRENCY);
     for (const item of items) {
       const blob = await item.read(onBytes);
       let type = mimeFor(item.path);
@@ -121,6 +121,7 @@ async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
     };
     return { book, bookFiles, texts, cacheName, entrySize: sizes[entryPath], baseTitle };
   } catch (e) {
+    await pool.drain().catch(() => {}); // in-flight puts must settle first, or they would recreate entries after the delete
     await caches.delete(cacheName).catch(() => {});
     throw e;
   }
