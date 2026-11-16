@@ -8,7 +8,7 @@ test('target=_top·_blank 링크는 리더 안에 머문다', async ({ page, con
   await f.locator('#top').click();
   await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'page2.html');
   expect(new URL(page.url()).pathname).toBe('/');
-  await f.evaluate(() => history.back());
+  await f.evaluate(() => location.replace('index.html'));
   await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'index.html');
   await f.locator('#blank').click();
   await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'page2.html');

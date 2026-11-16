@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { backToLibrary, idbGet, importFixture, openBook, scrollFrameTo } from './helpers';
+import { backToLibrary, bookFrame, idbGet, importFixture, openBook, scrollFrameTo } from './helpers';
 
 const prog = (page: any, id: string, path: string) => idbGet(page, 'progress', [id, path]);
 
@@ -104,8 +104,11 @@ test('문서 안 링크 이동과 뒤로 가기를 셸이 따라간다', async (
   await scrollFrameTo(f, 0.5);
   await f.locator('#rel').evaluate((a: HTMLAnchorElement) => a.click());
   await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'page2.html');
-  await f.evaluate(() => history.back());
-  await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'index.html');   // 셸이 뒤로 가기도 따라간다
+  // A script navigation still adds a frame entry (only links and the shell replace); the shell follows its back too.
+  await f.evaluate(() => { location.href = 'sub/page3.html'; });
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'sub/page3.html');
+  await bookFrame(page).evaluate(() => history.back());
+  await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'page2.html');   // 셸이 뒤로 가기도 따라간다
 });
 
 test('html은 잘리고 body가 스크롤러인 문서: body 스크롤을 따라간다', async ({ page }) => {

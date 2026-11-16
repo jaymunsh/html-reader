@@ -1,5 +1,5 @@
 import { installGuards } from './guards';
-import { installLinkHandling } from './links';
+import { installLinkHandling, keepHistoryFlat } from './links';
 import { applyRestore, onUserInput, whenStable } from './restore';
 import { findScroller, metrics, scrollToRatio, watchScroller } from './scroller';
 import { installTap } from './tap';
@@ -96,6 +96,7 @@ function start(): void {
 }
 
 if (isActive()) {
+  keepHistoryFlat(); // before any document script runs
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 }

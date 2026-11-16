@@ -20,7 +20,7 @@ test('북마크 추가 → 다른 페이지로 이동 → 북마크 탭에서 �
   await expect(page.getByTestId('btn-bookmark')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(() => idbAll(page, 'bookmarks')).toMatchObject([{ bookId: id, path: 'page2.html', label: 'page2.html · 50%' }]);
 
-  await f.evaluate(() => history.back());
+  await f.evaluate(() => location.replace('index.html'));
   await expect(page.getByTestId('reader')).toHaveAttribute('data-path', 'index.html');
   await openOverlay(page);
   await expect(page.getByTestId('btn-bookmark')).toHaveAttribute('aria-pressed', 'false');

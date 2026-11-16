@@ -6,6 +6,7 @@
   import { setScreen } from './chrome';
   import Settings from './settings/Settings.svelte';
   import Status from './Status.svelte';
+  import { currentEntry, enterScreen, leaveScreen, normalizeAtBoot, ownPop } from './screen-history';
   import { applyUpdate, hasWaitingUpdate, watchForUpdate } from './sw-client';
 
   type Screen = { name: 'library' } | { name: 'settings' } | { name: 'reader'; id: string; path: string | null };
@@ -16,13 +17,16 @@
     return id ? { name: 'reader', id, path: q.get('path') || null } : { name: 'library' };
   }
 
-  let screen = $state<Screen>(initial());
+  const first = initial();
+  let screen = $state<Screen>(first);
+  normalizeAtBoot(first.name !== 'library');
   let updateReady = $state(false);
   onMount(() => watchForUpdate(() => { updateReady = true; }));
 
   let receiving = 0; // files are on their way to the library: no update reload before their import takes the lock
   function toLibrary() {
     clean();
+    leaveScreen();
     screen = { name: 'library' };
     let wanted = false;
     try { wanted = sessionStorage.getItem('update-wanted') === '1'; } catch { /* ignore */ }
@@ -73,12 +77,44 @@
   function clean() {
     if (location.search) history.replaceState(null, '', '/');
   }
+  // The reader is up: a ?open= start turns its own entry into the library and pushes the reader above it (opening from the
+  // library already pushed within the click).
+  function readerOpened(id: string) {
+    clean();
+    enterScreen({ hr: 'reader', id });
+  }
+  function openReader(id: string) {
+    enterScreen({ hr: 'reader', id });
+    screen = { name: 'reader', id, path: null };
+  }
+  function openSettings() {
+    enterScreen({ hr: 'settings' });
+    screen = { name: 'settings' };
+  }
+  function closeSettings() {
+    leaveScreen();
+    screen = { name: 'library' };
+  }
+
+  // Back / forward between the library and the screen above it.
+  function onPopState() {
+    if (ownPop()) return;
+    const e = currentEntry();
+    if (screen.name === 'reader') {
+      if (e?.hr === 'reader' && e.id === screen.id) return;
+      if (reader) void reader.exit(); else toLibrary(); // exit flushes progress, then onexit → toLibrary (its entry is gone)
+    } else if (screen.name === 'settings') {
+      if (e?.hr !== 'settings') screen = { name: 'library' };
+    } else if (e) {
+      screen = e.hr === 'reader' ? { name: 'reader', id: e.id, path: null } : { name: 'settings' }; // forward
+    }
+  }
 </script>
 
 {#if screen.name === 'reader'}
   {#key screen.id}
     {#await import('./reader/Reader.svelte') then { default: Reader }}
-      <Reader bind:this={reader} bookId={screen.id} openPath={screen.path} onopened={clean} onexit={toLibrary} />
+      <Reader bind:this={reader} bookId={screen.id} openPath={screen.path} onopened={() => readerOpened(screen.name === 'reader' ? screen.id : '')} onexit={toLibrary} />
     {:catch}
       <Status kind="error" testid="reader-load-error">
         <p>문서를 열 수 없습니다.</p>
@@ -87,10 +123,12 @@
     {/await}
   {/key}
 {:else if screen.name === 'settings'}
-  <Settings onback={() => (screen = { name: 'library' })} />
+  <Settings onback={closeSettings} />
 {:else}
-  <Library bind:this={lib} {updateReady} onapply={() => void importRunning().then((busy) => { if (!busy) applyUpdate(); })} onsettings={() => (screen = { name: 'settings' })} onopen={(id) => (screen = { name: 'reader', id, path: null })} />
+  <Library bind:this={lib} {updateReady} onapply={() => void importRunning().then((busy) => { if (!busy) applyUpdate(); })} onsettings={openSettings} onopen={openReader} />
 {/if}
+
+<svelte:window onpopstate={onPopState} />
 
 <div class="top-inset" data-testid="top-inset" class:reader={screen.name === 'reader'}></div>
 

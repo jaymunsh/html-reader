@@ -27,6 +27,7 @@ export function createSession(iframe: HTMLIFrameElement, bookId: string, hooks: 
   let timer: ReturnType<typeof setTimeout> | null = null;
   let readySinceLoad = false;
   let graceTimer: ReturnType<typeof setTimeout> | null = null;
+  let started = false;
 
   const set = (s: AgentState) => { if (state !== s) { state = s; hooks.onState(s); } };
   const clear = () => { if (timer !== null) { clearTimeout(timer); timer = null; } };
@@ -90,7 +91,15 @@ export function createSession(iframe: HTMLIFrameElement, bookId: string, hooks: 
       clear();
       set('pending');
       timer = setTimeout(() => { timer = null; if (state === 'pending') set('limited'); }, READY_TIMEOUT_MS);
-      iframe.src = cacheKey(bookId, path);
+      const url = cacheKey(bookId, path);
+      // Page changes replace the frame's history entry: back leaves the reader in one step instead of walking the pages.
+      // The first load leaves the frame's initial about:blank, which never adds an entry.
+      const win = started ? iframe.contentWindow : null;
+      started = true;
+      if (win) {
+        try { win.location.replace(url); return; } catch { /* fall back to src */ }
+      }
+      iframe.src = url;
     },
     post(msg: ShellMsg): void {
       if (state === 'ready') iframe.contentWindow?.postMessage(wrap(msg), location.origin);

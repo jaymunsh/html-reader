@@ -129,3 +129,19 @@ test('pendingRestore: 같은 경로면 한 번 소비, 다른 경로면 비움, 
   p.set('c.html');                          // a plain navigation clears it
   expect(p.take('a.html')).toBeUndefined();
 });
+
+test('첫 이동은 src, 이후 쪽 이동은 location.replace(기록을 쌓지 않음), replace가 막히면 src', () => {
+  const { iframe, win } = makeIframe(); const { h } = makeHooks();
+  const replace = vi.fn();
+  (win.location as any).replace = replace;
+  const s = createSession(iframe, 'b1', h);
+  s.navigate('index.html');
+  expect((iframe as any).src).toBe('/book/b1/index.html');
+  expect(replace).not.toHaveBeenCalled();
+  s.navigate('sub/page 2.html');
+  expect(replace).toHaveBeenCalledWith('/book/b1/sub/page%202.html');
+  expect((iframe as any).src).toBe('/book/b1/index.html');
+  replace.mockImplementation(() => { throw new Error('blocked'); });
+  s.navigate('c.html');
+  expect((iframe as any).src).toBe('/book/b1/c.html');
+});
