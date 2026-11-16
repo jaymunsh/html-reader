@@ -82,6 +82,25 @@ test('밀어서 삭제', async ({ page, isMobile }) => {
   await ev('pointerdown', b.x + b.width - 30); await ev('pointermove', b.x + b.width - 90); await ev('pointermove', b.x + b.width - 150); await ev('pointerup', b.x + b.width - 150);
   await expect(page.getByTestId('bookmark-row')).toHaveCount(0);
   await expect.poll(async () => (await idbAll(page, 'bookmarks')).length).toBe(0);
+  await expect(page.getByTestId('undo-toast')).toContainText('북마크를 삭제했습니다');     // 되돌리기
+  await page.getByTestId('undo-delete').tap();
+  await expect(page.getByTestId('undo-toast')).toHaveCount(0);
+  await expect(page.getByTestId('bookmark-row')).toHaveCount(1);
+  await expect.poll(async () => (await idbAll(page, 'bookmarks')).length).toBe(1);
+  await expect(page.getByTestId('panel')).toHaveAttribute('data-open', 'true');
+});
+
+test('× 삭제 뒤 되돌리기 안내는 5초 뒤 사라지고 삭제는 그대로', async ({ page, isMobile }) => {
+  await page.goto('/');
+  const id = await importFixture(page, '10-single.html');
+  await openBook(page, id); await openOverlay(page);
+  await page.getByTestId('btn-bookmark').click();
+  await openBookmarks(page, isMobile);
+  await page.getByTestId('bookmark-delete').click();
+  await expect(page.getByTestId('bookmark-row')).toHaveCount(0);
+  await expect(page.getByTestId('undo-toast')).toBeVisible();
+  await expect(page.getByTestId('undo-toast')).toHaveCount(0, { timeout: 7000 });
+  await expect.poll(async () => (await idbAll(page, 'bookmarks')).length).toBe(0);
 });
 
 test('이름 바꾸기 대화상자: 패널·문서는 inert, Esc로 닫히고 포커스는 ⋯ 버튼으로', async ({ page, isMobile }) => {

@@ -68,3 +68,33 @@ test('파일이 많아도 현재 파일이 보이는 위치로 열린다 (Review
   await settled(page, 'panel');
   await expect(page.locator('[data-testid=file-row][data-path="p250.html"]')).toBeInViewport();
 });
+
+test('잡이를 아래로 끌면 닫히고, 조금 끌다 멈추고 놓으면 제자리로 돌아온다', async ({ page }) => {
+  await page.goto('/');
+  const id = await importFixture(page, '01-multipage.zip');
+  await openBook(page, id); await openOverlay(page);
+  const panel = page.getByTestId('panel'), grab = page.getByTestId('panel-grabber');
+  const openSheet = async () => {
+    await openOverlay(page);
+    await page.getByTestId('btn-panel').tap();
+    await expect(panel).toHaveAttribute('data-open', 'true');
+    await settled(page, 'panel');
+  };
+  await openSheet();
+  const top0 = (await panel.boundingBox())!.y;
+  const g = (await grab.boundingBox())!, x = g.x + g.width / 2, y = g.y + g.height / 2;
+  const ev = (t: string, cy: number) => grab.dispatchEvent(t, { clientX: x, clientY: cy, pointerId: 7, pointerType: 'touch', isPrimary: true, bubbles: true });
+  await ev('pointerdown', y); await ev('pointermove', y + 30); await ev('pointermove', y + 60);
+  expect(Math.round((await panel.boundingBox())!.y - top0)).toBe(60);                     // 손가락을 따라온다
+  await page.waitForTimeout(150); await ev('pointermove', y + 61); await page.waitForTimeout(150);
+  await ev('pointerup', y + 61);                                                           // 짧게 끌다 멈췄다 놓음
+  await expect(panel).toHaveAttribute('data-open', 'true');
+  await settled(page, 'panel');
+  expect(Math.round((await panel.boundingBox())!.y)).toBe(Math.round(top0));
+  await ev('pointerdown', y); for (const d of [80, 160, 240]) await ev('pointermove', y + d);
+  await page.waitForTimeout(150); await ev('pointerup', y + 240);                         // 4분의 1을 넘김(느리게 놓아도)
+  await expect(panel).toHaveAttribute('data-open', 'false');
+  await openSheet();
+  await ev('pointerdown', y); await ev('pointermove', y + 20); await ev('pointermove', y + 50); await ev('pointerup', y + 50);
+  await expect(panel).toHaveAttribute('data-open', 'false');                              // 짧아도 빠르게 튕기면 닫힌다
+});

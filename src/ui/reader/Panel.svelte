@@ -49,6 +49,29 @@
     if (w !== applied) { width = w; onWidthCommit?.(w); }
   }
   function cancel() { guide = null; }
+
+  // Mobile sheet: drag the grabber down to close. Past a quarter of the sheet, or a downward flick, closes; else it springs back.
+  const FLICK = 0.5;     // px/ms
+  const FLICK_MIN = 16;  // px: a flick still has to travel a little
+  let pull = $state<{ y0: number; dy: number; t: number; v: number } | null>(null);
+  function pullDown(e: PointerEvent) {
+    if (!open || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    pull = { y0: e.clientY, dy: 0, t: e.timeStamp, v: 0 };
+  }
+  function pullMove(e: PointerEvent) {
+    if (!pull) return;
+    const dy = Math.max(0, e.clientY - pull.y0), dt = e.timeStamp - pull.t;
+    if (dt > 0) pull.v = (dy - pull.dy) / dt;
+    pull.dy = dy; pull.t = e.timeStamp;
+  }
+  function pullUp(e: PointerEvent) {
+    if (!pull) return;
+    const { dy, t } = pull;
+    const v = e.timeStamp - t > 100 ? 0 : pull.v; // held still before letting go: not a flick
+    pull = null;
+    if (dy > (el?.offsetHeight ?? 400) / 4 || (v > FLICK && dy > FLICK_MIN)) onClose();
+  }
 </script>
 
 {#if !layout.desktop}
@@ -56,13 +79,16 @@
 {/if}
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <aside bind:this={el} class="panel" class:dock={layout.desktop} class:open data-testid="panel" data-open={open} tabindex="-1" inert={!open || blocked}
-  aria-label="패널" style:width={layout.desktop ? `${applied}px` : null} {onkeydown}>
+  aria-label="패널" class:pulling={!!pull} style:width={layout.desktop ? `${applied}px` : null}
+  style:transform={pull && pull.dy ? `translateY(${pull.dy}px)` : null} {onkeydown}>
   {#if layout.desktop}
     <div class="resizer" data-testid="panel-resizer" role="separator" aria-orientation="vertical" aria-label="패널 폭"
       onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={cancel}></div>
     {#if guide !== null}<div class="guide" data-testid="panel-resize-guide" aria-hidden="true" style:left={`${applied - guide - 2}px`}></div>{/if}
   {:else}
-    <div class="grabber" aria-hidden="true"></div>
+    <!-- Touch affordance only: Escape, the scrim and ☰ close the sheet for everyone else. -->
+    <div class="grab" data-testid="panel-grabber" aria-hidden="true" onpointerdown={pullDown} onpointermove={pullMove} onpointerup={pullUp}
+      onpointercancel={() => (pull = null)}><div class="grabber"></div></div>
   {/if}
   <div class="head">
     <div class="seg" role="tablist">
@@ -95,7 +121,10 @@
   .panel:not(.dock).open { transform: none; }
   .dock { top: 0; right: 0; bottom: 0; padding-top: var(--sat); border-left: 1px solid var(--hairline); }
   .dock:not(.open) { visibility: hidden; }
-  .grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--hairline); margin: 8px auto 0; flex: none; }
+  .grab { flex: none; display: flex; justify-content: center; padding: 8px 0; touch-action: none; cursor: grab; }
+  .grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--hairline); }
+  .panel.pulling { transition: none; }
+  @media (prefers-reduced-motion: reduce) { .panel:not(.dock), .scrim { transition: none; } }
   .resizer { position: absolute; left: -4px; top: 0; bottom: 0; width: 10px; cursor: col-resize; touch-action: none; z-index: var(--z-local); }
   /* Centered on the new left edge (offsets: the 1px border and half the 2px line). */
   .guide { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; z-index: var(--z-local); }

@@ -13,6 +13,7 @@
   import RibbonTab from './RibbonTab.svelte';
   import ScrollHandle from './ScrollHandle.svelte';
   import HintToast from './HintToast.svelte';
+  import Toast from '../Toast.svelte';
   import Panel from './Panel.svelte';
   import IssuesSheet from './IssuesSheet.svelte';
   import FilesTab from './FilesTab.svelte';
@@ -125,9 +126,28 @@
     marks = [b, ...marks];
     void putBookmark(b).catch(() => { marks = marks.filter((x) => x.id !== b.id); }); // failed write: the button tells the truth
   }
+  const restoreMark = (b: Bookmark) => { if (!marks.some((x) => x.id === b.id)) marks = [...marks, b].sort((x, y) => y.createdAt - x.createdAt); };
   function removeBookmark(b: Bookmark) {
     marks = marks.filter((x) => x.id !== b.id);
-    void deleteBookmark(b.id).catch(() => { marks = [...marks, b].sort((x, y) => y.createdAt - x.createdAt); });
+    void deleteBookmark(b.id).catch(() => restoreMark(b));
+  }
+  // Deleting from the bookmarks tab (swipe or ×) is final in IndexedDB at once; the toast's undo writes it back.
+  const UNDO_MS = 5000;
+  let undo = $state.raw<Bookmark | null>(null); // a plain record: IndexedDB cannot clone a state proxy
+  let undoTimer: ReturnType<typeof setTimeout> | undefined;
+  function deleteFromTab(b: Bookmark) {
+    removeBookmark(b);
+    undo = $state.snapshot(b);
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => { undo = null; }, UNDO_MS);
+  }
+  function undoDelete() {
+    const b = undo;
+    clearTimeout(undoTimer);
+    undo = null;
+    if (!b) return;
+    restoreMark(b);
+    void putBookmark(b).catch(() => { marks = marks.filter((x) => x.id !== b.id); });
   }
   function jump(b: Bookmark) {
     if (b.path === path) session?.post({ type: 'scroll-to', ratio: b.scrollRatio });
@@ -223,6 +243,7 @@
       clearTimeout(hideTimer);
       sheetHold?.(); issuesHold?.(); focusHold?.(); searchHold?.();
       clearTimeout(issueTimer);
+      clearTimeout(undoTimer);
     };
   });
 
@@ -427,7 +448,7 @@
           <FilesTab open={panelOpen} {sourceName} pagePaths={pages} {titles} {progress} current={path} onpick={pick} />
         {/if}
       {/snippet}
-      {#snippet bookmarks()}<BookmarksTab list={marks} onpick={jump} ondelete={removeBookmark} onrename={startRename} />{/snippet}
+      {#snippet bookmarks()}<BookmarksTab list={marks} onpick={jump} ondelete={deleteFromTab} onrename={startRename} />{/snippet}
     </Panel>
   {/if}
   {#if renaming}
@@ -447,7 +468,10 @@
     <ScrollHandle ratio={curRatio} label={fileName} onSeek={(r) => session?.post({ type: 'scroll-to', ratio: r })} {onDragState} />
   {/if}
   {#if !layout.desktop && !overlayOpen}<RibbonTab onopen={openOverlay} />{/if}
-  {#if hint && !layout.desktop}<HintToast ondismiss={dismissHint} />{/if}
+  {#if hint && !layout.desktop && !undo}<HintToast ondismiss={dismissHint} />{/if}
+  {#if undo}
+    <Toast testid="undo-toast" actionTestid="undo-delete" actionLabel="실행 취소" onaction={undoDelete} above>북마크를 삭제했습니다</Toast>
+  {/if}
   {#if showLine && !layout.desktop}<ProgressLine pct={curPct} hidden={overlayOpen && !layout.desktop} />{/if}
   {#if busy}<ProgressLine busy />{/if}
 </div>

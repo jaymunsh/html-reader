@@ -22,6 +22,7 @@
   --z-panel: 30;         /* files/bookmarks panel (sheet or dock) */
   --z-sheet-scrim: 39;   /* Sheet scrim */
   --z-sheet: 40;         /* Sheet (issues; P3 mobile search) */
+  --z-undo: 45;          /* undo toast: above the panel sheet it acts on, below dialogs */
   --z-dialog: 50;        /* Dialog: above panel and sheets, so one opened from them is on top */
   color-scheme: light;
 }
