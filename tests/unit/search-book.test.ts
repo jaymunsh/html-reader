@@ -48,3 +48,16 @@ test('capGroups limits total hits across groups', () => {
   expect(r.shown).toBe(30); expect(r.all).toBe(60);
   expect(capGroups([g('a', 5)], 30)).toMatchObject({ shown: 5, all: 5 });
 });
+test('fast path and foldCase agree on every astral uppercase letter (Deseret, Osage, Adlam...)', () => {
+  let checked = 0;
+  for (let cp = 0x10000; cp <= 0x1ffff; cp++) {
+    const c = String.fromCodePoint(cp), l = c.toLowerCase();
+    if (l === c || l.length !== c.length) continue;
+    checked++;
+    expect(foldCase(c)).toBe(l);
+    // fast path (plain text) and slow path (a length-changing İ forces foldCase) both match the lowercase query
+    expect(searchTexts([{ path: 'a', text: `x${c}y` }], l, ['a'])[0]?.total).toBe(1);
+    expect(searchTexts([{ path: 'a', text: `İ${c}y` }], l, ['a'])[0]?.total).toBe(1);
+  }
+  expect(checked).toBeGreaterThan(300);
+});

@@ -11,15 +11,15 @@ export const RENDER_HIT_STEP = 200;
 export interface SearchHit { before: string; match: string; after: string }
 export interface SearchGroup { path: string; total: number; hits: SearchHit[] }
 
-/** NFC + per-code-unit lowercase; units whose lowercase changes length (e.g. İ) stay as-is, so length is preserved. */
+/** NFC + per-code-point lowercase (astral included); code points whose lowercase changes length (e.g. İ) stay as-is, so length is preserved. */
 export function foldCase(s: string): string {
   let out = '';
-  for (const c of s.normalize('NFC')) out += c.length > 1 ? c : (c.toLowerCase().length === 1 ? c.toLowerCase() : c);
+  for (const c of s.normalize('NFC')) { const l = c.toLowerCase(); out += l.length === c.length ? l : c; }
   return out;
 }
 
 /**
- * Same result as foldCase for NFC input, but one native toLowerCase when that provably keeps offsets: the length must
+ * Same result as foldCase for NFC input (any length-preserving string lowercases identically per code point, astral included), but one native toLowerCase when that provably keeps offsets: the length must
  * not change and there must be no capital sigma (its lowercase depends on context; per-unit folding does not).
  */
 function fold(nfc: string): string {
