@@ -25,6 +25,8 @@ async function commitReady(p: ReadyPayload, terminate: () => void): Promise<stri
     if (!ok) throw new ImportError('failed', 'cache verification timed out');
     if (p.replace) {
       const prev = await commitReplace(p.book.id, p.book, p.bookFiles, p.texts, p.replace);
+      // Tell the SW before the old cache goes away: its memoized record still names it.
+      try { navigator.serviceWorker?.controller?.postMessage({ type: 'book-changed', id: p.book.id }); } catch { /* ignore */ }
       await caches.delete(prev).catch(() => {}); // only after the commit (spec §7.2-4); a leftover is an orphan for cleanup
       return p.book.id;
     }

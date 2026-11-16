@@ -75,7 +75,7 @@ export async function deleteBook(id: string): Promise<void> {
     tx.objectStore('books').delete(id);
     await deleteBookRecords(tx, id);
   });
-  if (book && typeof caches !== 'undefined') await caches.delete(book.cacheName);
-  // The SW memoizes the book record and path index; tell it (no-op outside a controlled window).
+  // The SW memoizes the book record and path index; tell it before the cache goes (no-op outside a controlled window).
   try { globalThis.navigator?.serviceWorker?.controller?.postMessage({ type: 'book-changed', id }); } catch { /* ignore */ }
+  if (book && typeof caches !== 'undefined') await caches.delete(book.cacheName);
 }

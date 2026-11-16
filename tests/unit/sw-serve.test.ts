@@ -24,6 +24,14 @@ test('SW memoizes the book record until invalidated', async () => {
   invalidateBook(id);
   await serve();
   expect(n()).toBe(first + 1);
+  // An invalidation that lands while a read is in flight must not let the stale record be memoized.
+  invalidateBook(id);
+  const before = n();
+  const inflight = serve();
+  invalidateBook(id);
+  await inflight;
+  await serve();
+  expect(n()).toBe(before + 2);
   spy.mockRestore(); vi.unstubAllGlobals();
 });
 

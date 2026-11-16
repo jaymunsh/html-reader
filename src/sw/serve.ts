@@ -22,12 +22,17 @@ const bookMemo = new Map<string, Book>();
 async function bookFor(id: string): Promise<Book | undefined> {
   const hit = bookMemo.get(id);
   if (hit) return hit;
+  const gen = generation.get(id) ?? 0;
   const b = await getBook(id);
-  if (b) bookMemo.set(id, b);
+  // An invalidation while the read was in flight makes the record possibly stale: serve it, but do not keep it.
+  if (b && (generation.get(id) ?? 0) === gen) bookMemo.set(id, b);
   return b;
 }
 
+const generation = new Map<string, number>();
+
 export function invalidateBook(id: string): void {
+  generation.set(id, (generation.get(id) ?? 0) + 1);
   bookMemo.delete(id);
   const prefix = `book-${id}-`;
   for (const k of [...indexMemo.keys()]) if (k.startsWith(prefix)) indexMemo.delete(k);
