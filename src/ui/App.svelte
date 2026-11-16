@@ -36,7 +36,7 @@
 
   // Files opened with the installed app (§7.5) go through the library's one import funnel.
   let lib = $state<Library>();
-  let reader = $state<{ exit(): Promise<void> }>();
+  let reader = $state<{ exit(): Promise<void>; closeLayers(): void; show(path: string): void }>();
   async function receiveFiles(files: File[]) {
     receiving++;
     try {
@@ -96,12 +96,35 @@
     screen = { name: 'library' };
   }
 
+  // A document that sends the whole tab to one of its pages (top.location = '/book/…'): stay in the app instead of loading
+  // that address (the SW would redirect it to /?open=, stacking entries). Navigation API only; elsewhere the SW redirect stays.
+  onMount(() => {
+    const nav = (window as unknown as { navigation?: EventTarget }).navigation;
+    const onNavigate = (ev: Event) => {
+      const e = ev as Event & { navigationType: string; cancelable: boolean; formData: unknown; downloadRequest: unknown; destination: { url: string } };
+      if (e.navigationType !== 'push' || !e.cancelable || e.formData || e.downloadRequest) return;
+      let id: string, path: string;
+      try {
+        const u = new URL(e.destination.url);
+        const m = u.origin === location.origin ? /^\/book\/([^/]+)\/(.+)$/.exec(u.pathname) : null;
+        if (!m) return;
+        id = m[1]; path = m[2].split('/').map(decodeURIComponent).join('/').normalize('NFC');
+      } catch { return; }
+      e.preventDefault();
+      if (screen.name === 'reader' && screen.id === id && reader) reader.show(path);
+      else if (screen.name === 'reader') { history.replaceState({ hr: 'reader', id }, '', '/'); screen = { name: 'reader', id, path }; }
+      else { enterScreen({ hr: 'reader', id }); screen = { name: 'reader', id, path }; }
+    };
+    nav?.addEventListener('navigate', onNavigate);
+    return () => nav?.removeEventListener('navigate', onNavigate);
+  });
+
   // Back / forward between the library and the screen above it.
   function onPopState() {
     if (ownPop()) return;
     const e = currentEntry();
     if (screen.name === 'reader') {
-      if (e?.hr === 'reader' && e.id === screen.id) return;
+      if (e?.hr === 'reader' && e.id === screen.id) { if (!e.layer) reader?.closeLayers(); return; } // back closes a sheet first
       if (reader) void reader.exit(); else toLibrary(); // exit flushes progress, then onexit → toLibrary (its entry is gone)
     } else if (screen.name === 'settings') {
       if (e?.hr !== 'settings') screen = { name: 'library' };

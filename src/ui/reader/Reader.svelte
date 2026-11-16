@@ -26,6 +26,8 @@
   import { isEditableTarget, shortcutFor, type Action } from '../../lib/shortcuts';
   import type { Mods } from '../../lib/protocol';
   import { stepZoom, zoomLabel } from '../../lib/zoom';
+  import { frameHistoryKey } from '../../lib/frame-history';
+  import { enterLayer, leaveLayer } from '../screen-history';
 
   let { bookId, openPath, onexit, onopened }: {
     bookId: string; openPath?: string | null; onexit: () => void; onopened?: () => void;
@@ -91,6 +93,17 @@
   let renaming = $state<Bookmark | null>(null);
   // A modal is up: the document and overlay are inert and the shortcuts do nothing (the rename dialog also blocks the panel).
   const sheet = $derived((!layout.desktop && (sheetOpen || searchOpen)) || issuesOpen || !!renaming);
+  // A modal up adds one history entry: Android / browser back closes it before leaving the reader (App calls closeLayers).
+  $effect(() => { if (sheet) enterLayer(bookId); else leaveLayer(); });
+  /** Back pressed with a modal up: close every modal layer (the rename dialog and the sheet under it alike). */
+  export function closeLayers() {
+    if (renaming) renaming = null;
+    if (issuesOpen) closeIssues();
+    if (searchOpen) closeSearch();
+    if (sheetOpen) closePanel();
+  }
+  /** Show a page of this book (a document that navigated the whole tab to it). */
+  export function show(p: string) { nav(p); }
   let sheetHold: (() => void) | null = null;
   function openSheet() { sheetOpen = true; sheetHold ??= holdOverlay('panel'); }
   function closePanel() {
@@ -251,6 +264,7 @@
     if ((await ensureController()) === 'unsupported') { notice = 'unsupported'; return; }
     if (gone) return;
     onopened?.();
+    try { sessionStorage.removeItem(frameHistoryKey(bookId)); } catch { /* ignore */ } // the book's own history starts fresh
     // Independent reads in one round: the first open must not wait on five sequential transactions.
     const [b, files, progress, list] = await Promise.all([
       getBook(bookId), getBookFiles(bookId), getProgress(bookId), listBookmarks(bookId).catch(() => []),

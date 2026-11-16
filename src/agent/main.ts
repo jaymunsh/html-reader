@@ -1,5 +1,6 @@
 import { installGuards } from './guards';
-import { installLinkHandling, keepHistoryFlat } from './links';
+import { installLinkHandling } from './links';
+import { installHistory } from './history';
 import { applyRestore, onUserInput, whenStable } from './restore';
 import { findScroller, metrics, scrollToRatio, watchScroller } from './scroller';
 import { installTap } from './tap';
@@ -11,6 +12,10 @@ const script = document.currentScript as HTMLScriptElement | null;
 const bookId = script?.dataset.book ?? '';
 const scale = Number(script?.dataset.scale) || 1;
 let currentScale = scale;
+
+// The real sessionStorage, before the guards hand the document a prefixed view of it (the frame history lives there).
+let realSession: Storage | null = null;
+try { realSession = window.sessionStorage; } catch { /* blocked */ }
 
 installGuards(bookId);
 
@@ -96,7 +101,7 @@ function start(): void {
 }
 
 if (isActive()) {
-  keepHistoryFlat(); // before any document script runs
+  installHistory(realSession, bookId); // before any document script runs
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 }

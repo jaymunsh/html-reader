@@ -35,11 +35,3 @@ export function installLinkHandling(send: (m: AgentMsg) => void): void {
     location.replace(l.url.href);
   });
 }
-
-/** Scripts' pushState becomes replaceState for the same reason (single-page documents, hash routers). */
-export function keepHistoryFlat(): void {
-  try {
-    const H = History.prototype;
-    Object.defineProperty(H, 'pushState', { configurable: true, writable: true, value: H.replaceState });
-  } catch { /* ignore */ }
-}
