@@ -197,3 +197,17 @@ test('삭제 대화상자가 열린 동안 가져오기가 시작 페이지를 �
   await page.keyboard.press('Escape');
   await expect(dialogs).toHaveCount(0);
 });
+
+test('가져오기가 끝나면 저장 공간 유지(persist)를 한 번 요청한다', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    const w = window as any; w.__persistCalls = 0;
+    // On the prototype: WebKit may hand out a fresh StorageManager per `navigator.storage` access.
+    const p = StorageManager.prototype as any;
+    p.persist = () => { w.__persistCalls++; return Promise.resolve(true); };
+    p.persisted = () => Promise.resolve(false);
+  });
+  await importFixture(page, '10-single.html');
+  await importFixture(page, '01-multipage.zip');
+  await expect.poll(() => page.evaluate(() => (window as any).__persistCalls)).toBe(1);
+});

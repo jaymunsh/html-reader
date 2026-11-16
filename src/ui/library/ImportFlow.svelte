@@ -4,6 +4,7 @@
   import { sourceNameOf } from '../../lib/importer/plan';
   import type { Book } from '../../lib/storage';
   import { tellSw } from '../sw-client';
+  import { requestPersistentStorage } from '../../lib/persist';
   import { ImportError, importErrorMessage, type ImportErrorCode } from '../../lib/importer/errors';
   import Dialog from './Dialog.svelte';
 
@@ -39,6 +40,7 @@
         chooseEntry: (paths) => new Promise((res) => { pick = res; choices = paths; }),
       });
       if (mode.kind === 'replace') tellSw({ type: 'book-changed', id: mode.bookId }); // the SW memoizes cacheName
+      void requestPersistentStorage(); // there is now a book worth keeping: ask the browser not to evict it
       onimported();
     } catch (e) {
       const code = e instanceof ImportError ? e.code : 'failed';

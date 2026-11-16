@@ -120,7 +120,6 @@
     if (!(await getSetting('safetyNoticeSeen'))) {
       await ask('safety');
       await setSetting('safetyNoticeSeen', true);
-      void navigator.storage?.persist?.(); // result intentionally ignored (shown in P2-1)
     }
     queue.push(...files);
     await drain();
