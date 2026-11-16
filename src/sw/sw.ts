@@ -4,6 +4,7 @@ import { getSetting, recordIssue, setSetting } from '../lib/storage';
 import { pickContext } from './context';
 import { decideRoute } from './route';
 import { invalidateBook, serveBookFile } from './serve';
+import { splitBookUrl } from '../lib/path';
 import { handleShareTarget } from './share';
 
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<string | { url: string; revision: string | null }> };
@@ -80,7 +81,10 @@ async function handle(event: FetchEvent): Promise<Response> {
   const request = event.request;
   const url = new URL(request.url);
   const isNavigation = request.mode === 'navigate';
-  const ctxBookId = await pickBookId(event);
+  // A subresource whose URL already names its book needs the client's context only if that book is missing
+  // (serveBookFile asks for it then), so the per-request clients.get is skipped.
+  const lazyCtx = !isNavigation && url.origin === self.location.origin && splitBookUrl(url.pathname) !== null;
+  const ctxBookId = lazyCtx ? null : await pickBookId(event);
 
   const route = decideRoute({
     url, selfOrigin: self.location.origin, method: request.method, isNavigation,
@@ -100,7 +104,7 @@ async function handle(event: FetchEvent): Promise<Response> {
     case 'book-redirect':
       return Response.redirect(new URL(route.to, url.origin).href, 302);
     case 'book-file':
-      return serveBookFile(route, request, (p) => event.waitUntil(p));
+      return serveBookFile(route, request, (p) => event.waitUntil(p), lazyCtx ? () => pickBookId(event) : undefined);
     case 'external': // cross-origin never reaches here (handled before respondWith)
     case 'passthrough':
       return fetch(request);

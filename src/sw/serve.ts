@@ -4,7 +4,7 @@ import {
 import { isHtmlMime, isMediaMime } from '../lib/mime';
 import { agentTag, planInjection, SCAN_BYTES } from '../lib/inject';
 import { rangeResponse } from '../lib/range';
-import { getBook, getBookFiles, recordIssue } from '../lib/storage';
+import { getBook, getBookFiles, recordIssue, type Book } from '../lib/storage';
 import type { Route } from './route';
 
 export const NOT_IN_BUNDLE_HTML =
@@ -16,7 +16,19 @@ export const NOT_IN_BUNDLE_HTML =
 // 캐시일 뿐이다. 진실은 IndexedDB이며 SW가 재시작되면 비워진다.
 const indexMemo = new Map<string, PathIndex>();
 
+const bookMemo = new Map<string, Book>();
+
+/** The book record, memoized (found records only). Dropped by invalidateBook (book-changed / delete) and on SW restart. */
+async function bookFor(id: string): Promise<Book | undefined> {
+  const hit = bookMemo.get(id);
+  if (hit) return hit;
+  const b = await getBook(id);
+  if (b) bookMemo.set(id, b);
+  return b;
+}
+
 export function invalidateBook(id: string): void {
+  bookMemo.delete(id);
   const prefix = `book-${id}-`;
   for (const k of [...indexMemo.keys()]) if (k.startsWith(prefix)) indexMemo.delete(k);
 }
@@ -57,9 +69,10 @@ export async function serveBookFile(
   route: Extract<Route, { kind: 'book-file' }>,
   request: Request,
   waitUntil?: WaitUntil,
+  resolveCtx?: () => Promise<string | null>,
 ): Promise<Response> {
   try {
-    return await serveInner(route, request, waitUntil);
+    return await serveInner(route, request, waitUntil, resolveCtx);
   } catch {
     return new Response('서비스 워커가 저장소를 읽지 못했습니다.', {
       status: 503,
@@ -72,8 +85,9 @@ async function serveInner(
   route: Extract<Route, { kind: 'book-file' }>,
   request: Request,
   waitUntil?: WaitUntil,
+  resolveCtx?: () => Promise<string | null>,
 ): Promise<Response> {
-  const { bookId, rest, ctxBookId } = route;
+  const { bookId, rest } = route;
   // Recording must not delay the response; the SW stays alive for it via waitUntil.
   const record = (id: string, path: string, kind: Parameters<typeof recordIssue>[2]) => {
     const p = recordIssue(id, path, kind).catch(() => {});
@@ -82,8 +96,10 @@ async function serveInner(
   const nav = request.mode === 'navigate';
   const url = new URL(request.url);
 
-  const book = await getBook(bookId);
+  const book = await bookFor(bookId);
   if (!book) {
+    // The client's book context is only needed here; the caller may defer computing it.
+    const ctxBookId = resolveCtx ? await resolveCtx() : route.ctxBookId;
     if (ctxBookId && ctxBookId !== bookId) {
       record(ctxBookId, '../' + bookId + (rest ? '/' + safeDecode(rest) : ''), 'outside-root');
     }

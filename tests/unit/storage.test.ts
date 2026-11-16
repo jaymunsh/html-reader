@@ -136,3 +136,11 @@ test('commitReplace: 포인터·파일·텍스트 교체, 기록 정리, 식별 
   expect((await S.getTexts(id)).map((t) => t.path)).toEqual(['new.html']);
   expect(await S.listIssues(id)).toEqual([]);
 });
+
+test('deleteBook은 SW에 book-changed를 알린다', async () => {
+  const post = vi.fn();
+  vi.stubGlobal('navigator', { serviceWorker: { controller: { postMessage: post } } });
+  await S.commitNewBook(book('dddddddddddd'), { bookId: 'dddddddddddd', paths: ['index.html'], titles: {} }, []);
+  await S.deleteBook('dddddddddddd');
+  expect(post).toHaveBeenCalledWith({ type: 'book-changed', id: 'dddddddddddd' });
+});
