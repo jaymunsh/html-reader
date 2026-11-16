@@ -39,15 +39,14 @@
   }
 </script>
 
-<div bind:this={el} class="card" class:open={menu} data-testid="book-card" data-book-id={book.id} data-title={book.title} role="button" tabindex="0"
-  onclick={click} onpointerdown={down} onpointermove={move} onpointerup={stop} onpointercancel={stop}
-  oncontextmenu={(e) => { e.preventDefault(); clearTimeout(timer); menu = true; }}
-  onkeydown={(e) => {
-    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onopen(book.id); }
-  }}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div bind:this={el} class="card" class:open={menu} data-testid="book-card" data-book-id={book.id} data-title={book.title}
+  onpointerdown={down} onpointermove={move} onpointerup={stop} onpointercancel={stop}
+  oncontextmenu={(e) => { e.preventDefault(); clearTimeout(timer); menu = true; }}>
   <ProgressRing {pct} />
   <span class="body">
-    <span class="title" data-testid="book-title">{book.title}</span>
+    <!-- The card is not itself interactive: the title is the real button, its ::after stretches over the card. The ⋯ button is a sibling. -->
+    <button type="button" class="open" onclick={click}><span class="title" data-testid="book-title">{book.title}</span></button>
     <span class="sub">{book.sourceName} · {ymd(book.importedAt)}</span>
     <span class="meta">
       <span data-testid="book-pages">{readCount}/{book.pagePaths.length}쪽</span>
@@ -76,7 +75,9 @@
   /* The open menu overlaps the cards below it: lift this card so they do not take its presses. */
   .card.open { z-index: 1; }
   .card:active { transform: scale(.985); }
-  .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .open { all: unset; display: block; cursor: pointer; }
+  .open::after { content: ''; position: absolute; inset: 0; border-radius: var(--r-card); }
+  .open:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
   .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .title {
     font-size: 16px; font-weight: 650; line-height: 1.3; letter-spacing: -0.01em; overflow-wrap: anywhere;
