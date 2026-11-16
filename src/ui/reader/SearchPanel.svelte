@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import Icon from '../icons/Icon.svelte';
-  import { SEARCH_DEBOUNCE_MS, hitSnippet, searchBook, type SearchGroup, type SearchHit } from '../../lib/search';
+  import { RENDER_HIT_STEP, SEARCH_DEBOUNCE_MS, capGroups, hitSnippet, searchBook, type SearchGroup, type SearchHit } from '../../lib/search';
 
   // Spec §7.1. 'fullscreen': the mobile panel's content (the caller wraps it in a Sheet).
   // 'dropdown': the PC top bar's input with results below it; not modal. Below a 640px bar it collapses to a 44px toggle.
@@ -14,6 +14,9 @@
   let query = $state('');
   // The groups found for `q`: kept until the next query's results arrive (no flicker while typing).
   let res = $state<{ q: string; groups: SearchGroup[] } | null>(null);
+  let limit = $state(RENDER_HIT_STEP); // hits rendered in total; "더 보기" raises it
+  const pending = $derived(query.trim() !== '' && res?.q !== query.trim()); // debounce or search in flight
+  const capped = $derived(res ? capGroups(res.groups, limit) : null);
   let open = $state(false);     // dropdown: the results are showing
   let expanded = $state(false); // dropdown on a narrow bar: the input is shown in place of the toggle
   let input = $state<HTMLInputElement>();
@@ -22,6 +25,7 @@
   $effect(() => {
     const q = query.trim();
     if (!q) { res = null; return; }
+    limit = RENDER_HIT_STEP;
     let live = true;
     const t = setTimeout(() => {
       void searchBook(bookId, q).then((groups) => { if (live) res = { q, groups }; }).catch(() => { if (live) res = { q, groups: [] }; });
@@ -56,8 +60,11 @@
 {#snippet results()}
   <!-- Keep focus in the input while clicking a result (WebKit would blur it to the body and close the dropdown first). -->
   <div class="results" role="presentation" onmousedown={(e) => variant === 'dropdown' && e.preventDefault()}>
-    {#if res}
-      {#each res.groups as g (g.path)}
+    {#if pending}
+      <p class="busy" data-testid="search-pending" role="status">검색 중…</p>
+    {/if}
+    {#if res && capped}
+      {#each capped.groups as g (g.path)}
         <section class="group" data-testid="search-group" data-path={g.path}>
           <h3><span class="fn">{name(g.path)}</span><span class="n">{g.total > g.hits.length ? `${g.total}건 중 ${g.hits.length}건 표시` : `${g.total}건`}</span></h3>
           {#each g.hits as h, i (i)}
@@ -68,6 +75,9 @@
       {:else}
         <p class="empty">일치하는 내용이 없습니다</p>
       {/each}
+      {#if capped.all > capped.shown}
+        <button type="button" class="more" data-testid="search-more" onclick={() => (limit += RENDER_HIT_STEP)}>더 보기 ({capped.all - capped.shown}건 남음)</button>
+      {/if}
     {/if}
     <p class="note" data-testid="search-limit-note">{LIMIT_NOTE}</p>
   </div>
@@ -123,6 +133,8 @@
   .hit:hover { background: var(--accent-soft); }
   .hit:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   mark { background: var(--accent-soft); color: var(--accent); font-weight: 600; border-radius: 3px; }
+  .busy { margin: 0; padding: 12px 16px 0; font-size: 13px; color: var(--text-3); }
+  .more { display: block; width: 100%; min-height: 44px; padding: 10px 16px; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; }
   .empty { margin: 24px 16px; text-align: center; color: var(--text-3); }
   .note { margin: 0; padding: 12px 16px; font-size: 12px; color: var(--text-3); }
 
