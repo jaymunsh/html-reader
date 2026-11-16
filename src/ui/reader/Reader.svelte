@@ -5,6 +5,7 @@
   import { ProgressTracker, bookProgress, formatPageInfo, visiblyChanged } from '../../lib/progress';
   import { neighbor, orderedPages } from '../../lib/file-tree';
   import ProgressLine from './ProgressLine.svelte';
+  import Status from '../Status.svelte';
   import type { Restore } from '../../lib/protocol';
   import { ensureController, tellSw } from '../sw-client';
   import Icon from '../icons/Icon.svelte';
@@ -44,6 +45,15 @@
   let hint = $state(false); // first-run hint, shown once the setting has loaded as unseen
   async function dismissHint() { await setSetting('hintSeen', true).catch(() => {}); hint = false; }
   $effect(() => { if (overlayOpen && hint) void dismissHint(); });
+  let opened = $state(false); // the first page has reported (ready or limited): the loading note goes away
+  // A page that takes more than 300ms to become ready shows an indeterminate line (fast pages never flash it).
+  const BUSY_DELAY_MS = 300;
+  let busy = $state(false);
+  $effect(() => {
+    if (agent !== 'pending' || notice !== 'none') { busy = false; return; }
+    const t = setTimeout(() => { busy = true; }, BUSY_DELAY_MS);
+    return () => clearTimeout(t);
+  });
   const pageInfo = $derived(pages.length ? formatPageInfo(pages, path, bookPct) : '');
   let progress = $state<ReadonlyMap<string, PageProgress>>(new Map());
   const refreshBook = () => { if (book && tracker) { progress = tracker.all(); bookPct = bookProgress(book.pagePaths, progress).pct; } };
@@ -220,18 +230,18 @@
     if ((await ensureController()) === 'unsupported') { notice = 'unsupported'; return; }
     if (gone) return;
     onopened?.();
-    const b = await getBook(bookId);
+    // Independent reads in one round: the first open must not wait on five sequential transactions.
+    const [b, files, progress, list] = await Promise.all([
+      getBook(bookId), getBookFiles(bookId), getProgress(bookId), listBookmarks(bookId).catch(() => []),
+    ]);
     if (gone) return;
     if (!b) { notice = 'missing'; return; }
     book = b;
     scale = b.textScale ?? 1;
     pages = orderedPages(b.pagePaths);
-    const files = await getBookFiles(bookId);
     titles = files?.titles ?? {};
     sourceName = b.sourceName;
-    const progress = await getProgress(bookId);
-    marks = await listBookmarks(bookId).catch(() => []);
-    if (gone) return;
+    marks = list;
     tracker = new ProgressTracker(bookId, progress);
     refreshBook();
     const known = new Set(files?.paths ?? b.pagePaths);
@@ -243,8 +253,9 @@
     path = start;
     firstPath = start;
     session = createSession(iframe, bookId, {
-      onState: (s) => { agent = s; },
+      onState: (s) => { agent = s; if (s === 'limited') opened = true; },
       onPage: (p, t) => {
+        opened = true;
         path = p;
         curPct = 0; // never show the previous page's position
         curRatio = 0;
@@ -358,15 +369,17 @@
 <svelte:window onkeydown={onWindowKey} bind:innerWidth={vw} />
 
 {#if notice === 'unsupported'}
-  <div role="alert" data-testid="unsupported-notice">
+  <Status kind="error" testid="unsupported-notice">
     <p>이 환경에서는 문서를 열 수 없습니다.</p>
     <button type="button" onclick={onexit}>서재로</button>
-  </div>
+  </Status>
 {:else if notice === 'missing'}
-  <div role="alert" data-testid="book-missing-notice">
+  <Status kind="error" testid="book-missing-notice">
     <p>문서를 찾을 수 없습니다.</p>
     <button type="button" data-testid="confirm-ok" onclick={onexit}>확인</button>
-  </div>
+  </Status>
+{:else if !opened}
+  <Status kind="loading" testid="reader-loading" delay={BUSY_DELAY_MS}><p>문서를 여는 중…</p></Status>
 {/if}
 
 <div class="reader" class:desk={layout.desktop} data-testid="reader" data-book-id={bookId} data-path={path} data-agent={agent} data-overlay={layout.desktop || overlayOpen ? 'open' : 'closed'}
@@ -436,6 +449,7 @@
   {#if !layout.desktop && !overlayOpen}<RibbonTab onopen={openOverlay} />{/if}
   {#if hint && !layout.desktop}<HintToast ondismiss={dismissHint} />{/if}
   {#if showLine && !layout.desktop}<ProgressLine pct={curPct} hidden={overlayOpen && !layout.desktop} />{/if}
+  {#if busy}<ProgressLine busy />{/if}
 </div>
 
 <!-- Hidden in limited mode (no scroll position; P3-K11: the 320px bar has no room for it beside the badge). -->
@@ -476,5 +490,6 @@
   }
   .err { margin: -12px 0 12px; font-size: 14px; color: var(--warn-fg); }
   iframe { position: fixed; top: var(--sat); left: 0; right: var(--panel-w); bottom: 0; width: calc(100% - var(--panel-w)); height: calc(100% - var(--sat)); border: 0; display: block; }
+  .desk { --busy-top: calc(var(--sat) + 48px); }
   .desk iframe { top: calc(var(--sat) + 48px); height: calc(100% - var(--sat) - 48px); }
 </style>

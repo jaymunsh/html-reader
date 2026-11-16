@@ -5,6 +5,7 @@
   import Library from './library/Library.svelte';
   import { setScreen } from './chrome';
   import Settings from './settings/Settings.svelte';
+  import Status from './Status.svelte';
   import { applyUpdate, hasWaitingUpdate, watchForUpdate } from './sw-client';
 
   type Screen = { name: 'library' } | { name: 'settings' } | { name: 'reader'; id: string; path: string | null };
@@ -79,10 +80,10 @@
     {#await import('./reader/Reader.svelte') then { default: Reader }}
       <Reader bind:this={reader} bookId={screen.id} openPath={screen.path} onopened={clean} onexit={toLibrary} />
     {:catch}
-      <div role="alert" data-testid="reader-load-error">
+      <Status kind="error" testid="reader-load-error">
         <p>문서를 열 수 없습니다.</p>
         <button type="button" onclick={toLibrary}>서재로</button>
-      </div>
+      </Status>
     {/await}
   {/key}
 {:else if screen.name === 'settings'}
