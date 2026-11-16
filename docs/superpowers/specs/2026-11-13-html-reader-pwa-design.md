@@ -514,7 +514,7 @@ agent는 주입 위치상 문서의 다른 스크립트보다 먼저 실행된�
 ### 13.1 방향
 - **B(유리) 베이스 + 화면 끝에 붙은 바**: 오버레이 상단·하단 바는 플로팅 캡슐이 아니라 화면 가장자리에 붙는다.
   바 배경은 반투명 + 블러(`backdrop-filter: blur(22px) saturate(1.6)`), 경계는 1px 헤어라인.
-- 글꼴: `Pretendard Variable`(v1.3.9 `PretendardVariable.woff2` 약 2MB를 `/__app/fonts/`에 번들·프리캐시, 오프라인 동작, OFL `LICENSE.txt` 동봉), 폴백 `system-ui`.
+- 글꼴: `Pretendard Variable`(v1.3.9 `PretendardVariable.woff2` 약 2MB 원본을 `scripts/font-src/`에 두고 `scripts/subset-fonts.py`로 unicode-range 조각(라틴·상용 한글 2350자·나머지 한글 3조각·기타)으로 나눠 `/__app/fonts/`에 번들·전부 프리캐시. 처음 방문에는 화면 글자에 필요한 조각만 받는다, 오프라인 동작, OFL `LICENSE.txt` 동봉), 폴백 `system-ui`.
 - 아이콘: 인라인 스트로크 SVG(1.8px), 이모지 사용 안 함.
 - 터치 대상은 44px 이상. 숫자·텍스트 대비는 WCAG AA(4.5:1) 이상.
 

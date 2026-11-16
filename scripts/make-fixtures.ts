@@ -6,7 +6,7 @@ import { buildZip, encodeEucKr, type BuildEntry } from '../tools/zip-builder.ts'
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '..');
-const FONT = join(ROOT, 'public/__app/fonts/PretendardVariable.woff2');
+const FONT = join(ROOT, 'scripts/font-src/PretendardVariable.woff2');
 const enc = new TextEncoder();
 const PNG_1PX = Uint8Array.from(Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));

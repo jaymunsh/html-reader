@@ -1,4 +1,5 @@
-@font-face { font-family: 'Pretendard Variable'; src: url('/__app/fonts/PretendardVariable.woff2') format('woff2-variations'); font-weight: 45 920; font-display: swap; }
+/* Pretendard Variable, split by unicode-range (generated: scripts/subset-fonts.py); only the subsets the text needs are fetched. */
+@import './pretendard.css';
 :root {
   --bg-app: #EEF0F4; --bg-reader: #FFFFFF; --surface: #FFFFFF;
   --bar: rgba(250,251,253,0.86); --hairline: rgba(21,24,30,0.08);
