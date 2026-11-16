@@ -147,6 +147,7 @@ export function makeFixtures(outDir: string, opts: { big?: boolean } = {}): void
     ]),
     '09-click-handlers.zip': z([f('index.html', clickPage()), f('page2.html', page({ title: '두 번째', h1: 'page2' }))]),
     '10-single.html': long({ title: 'Document', h1: 'single' }),
+    '14-dark-bg.html': long({ title: '어두운 문서', h1: 'dark', head: '<style>body{background:#1e2028;color:#d8dae0}</style>' }),
     '11-sw-killer.zip': z([
       f('index.html', page({
         title: 'killer', h1: 'killer',

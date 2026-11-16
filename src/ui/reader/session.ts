@@ -10,6 +10,7 @@ export interface SessionHooks {
   onTap(): void;
   onKey(key: string, mods: Mods): void;
   onExternal(url: string): void;
+  onBg(color: string | null): void; // raw CSS from the page: the receiver sanitizes it
   getInit(path: string): { textScale: number; restore?: Restore };
   onNoSw(): void;
 }
@@ -60,6 +61,7 @@ export function createSession(iframe: HTMLIFrameElement, bookId: string, hooks: 
       case 'tap': if (state === 'ready') hooks.onTap(); break;
       case 'key': if (state === 'ready') hooks.onKey(m.key, m.mods); break;
       case 'open-external': hooks.onExternal(m.url); break;
+      case 'bg': if (state === 'ready') hooks.onBg(m.color); break;
     }
   }
 

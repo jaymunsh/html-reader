@@ -28,6 +28,8 @@
   import { stepZoom, zoomLabel } from '../../lib/zoom';
   import { frameHistoryKey } from '../../lib/frame-history';
   import { enterLayer, leaveLayer } from '../screen-history';
+  import { setBookBg } from '../chrome';
+  import { cssRgbToHex } from '../../lib/color';
 
   let { bookId, openPath, onexit, onopened }: {
     bookId: string; openPath?: string | null; onexit: () => void; onopened?: () => void;
@@ -253,6 +255,7 @@
       document.removeEventListener('visibilitychange', onVisibility);
       flush();
       session?.destroy();
+      setBookBg(null);
       clearTimeout(hideTimer);
       sheetHold?.(); issuesHold?.(); focusHold?.(); searchHold?.();
       clearTimeout(issueTimer);
@@ -288,7 +291,7 @@
     path = start;
     firstPath = start;
     session = createSession(iframe, bookId, {
-      onState: (s) => { agent = s; if (s === 'limited') opened = true; },
+      onState: (s) => { agent = s; if (s === 'limited') { opened = true; setBookBg(null); } },
       onPage: (p, t) => {
         opened = true;
         path = p;
@@ -315,6 +318,7 @@
       onTap,
       onKey,
       onExternal: (url) => { window.open(url, '_blank', 'noopener'); },
+      onBg: (c) => setBookBg(cssRgbToHex(c)),
       getInit: (p) => {
         const init: { textScale: number; restore?: Restore } = { textScale: book?.textScale ?? 1 };
         const pr = pending.take(p);

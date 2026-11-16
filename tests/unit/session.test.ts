@@ -20,7 +20,7 @@ function makeHooks() {
   const states: string[] = [];
   const h = {
     onState: vi.fn((s: string) => { states.push(s); }), onPage: vi.fn(), onScroll: vi.fn(), onTap: vi.fn(), onKey: vi.fn(),
-    onExternal: vi.fn(), getInit: vi.fn(() => ({ textScale: 1, restore: { scrollRatio: 0.4 } })), onNoSw: vi.fn(),
+    onExternal: vi.fn(), getInit: vi.fn(() => ({ textScale: 1, restore: { scrollRatio: 0.4 } })), onNoSw: vi.fn(), onBg: vi.fn(),
   };
   return { h: h as unknown as SessionHooks & typeof h, states };
 }
@@ -145,4 +145,15 @@ test('첫 이동은 src, 이후 쪽 이동은 location.replace(기록을 쌓지 
   replace.mockImplementation(() => { throw new Error('blocked'); });
   s.navigate('c.html');
   expect((iframe as any).src).toBe('/book/b1/c.html');
+});
+
+test('bg는 ready 이후에만 전달된다', () => {
+  const { iframe, win } = makeIframe(); const { h } = makeHooks();
+  createSession(iframe, 'b1', h).navigate('index.html');
+  post(win, agentMsg({ type: 'bg', color: 'rgb(1, 2, 3)' }));
+  expect(h.onBg).not.toHaveBeenCalled();
+  post(win, agentMsg({ type: 'ready', path: 'index.html', title: 'T' }));
+  post(win, agentMsg({ type: 'bg', color: 'rgb(1, 2, 3)' }));
+  post(win, agentMsg({ type: 'bg', color: null }));
+  expect(h.onBg.mock.calls).toEqual([['rgb(1, 2, 3)'], [null]]);
 });

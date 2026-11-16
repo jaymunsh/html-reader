@@ -170,7 +170,7 @@ reader-agent는 `/__reader/agent.js`에 둔다. 앱 HTML은 `/`(=`/index.html`)�
 2. 셸이 `settings.activeBookId`를 기록하고 SW에도 메시지로 알린다. iframe에 `/book/<id>/<lastPath 또는 entryPath>`를 로드한다.
 3. SW가 파일로 응답하고, 네비게이션 HTML이면 agent를 주입한다(§5.4).
 4. **핸드셰이크**(§6.7): agent `ready` → 셸 `init{textScale, restore?}` → agent가 적용 후 보고 시작.
-5. agent는 스크롤 시 `scroll{pct, ratio}`, 탭 시 `tap`, 키 입력 시 `key{...}`를 보낸다.
+5. agent는 스크롤 시 `scroll{pct, ratio}`, 탭 시 `tap`, 키 입력 시 `key{...}`, 문서 배경색이 정해지거나 바뀔 때 `bg{color}`(§6.6)를 보낸다.
 6. iframe 안에서 페이지를 이동하면 새 페이지의 `ready`가 온다. 셸은 그때 `lastPath`를 갱신하고 파일 패널의 현재 파일 표시를 갱신한다.
 7. 셸이 진행률을 갱신한다(메모리 갱신 + 1초 디바운스 저장, `pagehide`·`visibilitychange(hidden)` 시 즉시 저장).
 
@@ -308,14 +308,24 @@ DOM 변경(`ResizeObserver` + 지연 재탐지)에 대응하며, 진행률·핸�
 - **상단 영역은 고정된 색으로 칠한다.** 문서 내용을 상태바 아래로 끌어올리지 않는다.
   - `apple-mobile-web-app-status-bar-style`은 `default`로 둔다(상태바 글자색은 시스템이 처리).
   - 서재 화면: 앱 배경색(라이트 `#EEF0F4`, 다크 `#101216`).
-  - 리더 화면: **문서 영역 색**(라이트 `#FFFFFF`, 다크 `#000000`). 대부분의 문서가 흰 바탕이라 상단 띠가 문서와 이어져 보인다.
-    어두운 바탕 문서에서는 상단 띠만 흰색으로 남는 한계를 수용한다.
-  - 셸의 `html`·`body` `background-color`와 `theme-color` 메타는 화면(서재/리더) 전환 시 위 값으로 바꾼다. 매니페스트 `theme_color`·`background_color`는 서재 값으로 둔다.
+  - 리더 화면: 설정 **"리더 상단 색"**(설정 화면, `화면 테마` 아래 세그먼트, IndexedDB `settings.readerChrome`)으로 정한다.
+    - `book` **책 배경 따라가기**(기본): agent가 문서의 실제 배경색을 보고하고(`{type:'bg', color}`), 셸이 그 색으로 칠한다.
+      `html` → `body` → 스크롤 컨테이너 순으로 계산된 `background-color`를 보고 처음 나오는 투명하지 않은 색을 쓴다.
+      그보다 먼저 `background-image`(그라데이션·이미지)가 있으면 '알 수 없음'으로 본다.
+      agent는 시작 시·`load`·레이아웃 안정화 후·스크롤 컨테이너 변경 시, 그리고 `html`/`body`의 `class`·`style`·`data-theme` 속성 변경
+      (MutationObserver, 100ms 디바운스)과 `prefers-color-scheme` 변경 때 다시 확인하며, 값이 바뀔 때만 보낸다.
+      셸은 받은 문자열을 **불투명 `rgb()`/`rgba()`만** 파싱해 `#rrggbb`로 바꾸고, 그 외(투명·반투명·`oklch()` 등 다른 문법·잘못된 값)는
+      '알 수 없음'으로 본다. 임의 문자열을 CSS에 넣지 않는다.
+      '알 수 없음'·제한 모드(agent 없음)·리더를 떠난 뒤에는 **문서 영역 색**(라이트 `#FFFFFF`, 다크 `#000000`)으로 돌아간다.
+    - `app` **앱 색**: 서재와 같은 앱 배경색(라이트 `#EEF0F4`, 다크 `#101216`). 화면을 오가도 상단 색이 바뀌지 않는다.
+    - 상단 띠 자체에는 셸 글자·아이콘이 없다(오버레이 상단 바는 자기 배경 `--bar` 위에 그려진다). 상태바 글자색은 시스템이 처리한다.
+  - 셸의 `html`·`body` `background-color`와 `theme-color` 메타, 상단 띠는 화면(서재/리더) 전환·설정 변경·문서 배경 보고 시 위 값으로 바꾼다. 매니페스트 `theme_color`·`background_color`는 서재 값으로 둔다.
   - 셸 최상단에 그 색의 fixed 요소(높이 `env(safe-area-inset-top)`)를 항상 두어, Safari 탭에서도 상단 바가 문서 내용 대신 이 색을 쓰게 한다.
 - iframe은 `top: env(safe-area-inset-top)`부터 **화면 맨 아래까지** 배치한다. 하단 홈 인디케이터는 문서 위에 겹쳐 그려지며(일반 Safari와 같은 동작), 하단 여백 띠는 두지 않는다.
 - 오버레이 상단 바는 safe-area까지 덮도록 화면 맨 위부터, 하단 바는 홈 인디케이터 영역까지 덮도록 화면 맨 아래까지 붙인다(`padding`에 safe-area 값을 더함).
 - `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">` — `user-scalable=no`나 `maximum-scale`은 두지 않는다(핀치 확대 허용, §7.4).
-- 문서 배경색에 맞춰 상단 색을 바꾸는 동적 동기화는 하지 않는다. 검증할 수 없는 iOS 버전별 동작에 의존하지 않기 위해서다.
+- 문서 배경색 동기화는 셸 자신의 `html`/`body`/`theme-color`/상단 띠 색을 바꾸는 것뿐이며, 문서 내용을 상태바 아래로 끌어올리지 않는다.
+  iOS 버전별 동작이 기대와 다르면 `app`(고정 색)을 고를 수 있다.
 
 ### 6.7 셸 ↔ agent 프로토콜
 - **활성 조건**: agent는 `window.parent === window.top`이고 부모가 같은 출처의 리더 셸일 때만 활성화된다. 중첩 iframe이나 frameset 자식 안에서는 가드(§9.4)만 설치하고 보고는 하지 않는다.

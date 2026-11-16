@@ -11,11 +11,22 @@ export function applyTheme(theme: Theme): void {
 
 const hex = (rgb: string) => '#' + (rgb.match(/\d+/g) ?? []).slice(0, 3).map((n) => (+n).toString(16).padStart(2, '0')).join('');
 
-/** Paint html/body and the theme-color meta with the screen's token (computed value). */
+export type ReaderChrome = 'book' | 'app';
+const isReaderChrome = (v: unknown): v is ReaderChrome => v === 'book' || v === 'app';
+let readerChrome: ReaderChrome = 'book';
+let readerTouched = false;
+let bookBg: string | null = null; // sanitized '#rrggbb' of the open page, or null (unknown -> --bg-reader)
+
+/** Reader top color (spec §6.6): the book's background under 'book' (else --bg-reader), the app background under 'app'. */
+const screenColor = (screen: Screen) =>
+  screen !== 'reader' || readerChrome === 'app' ? 'var(--bg-app)' : bookBg ?? 'var(--bg-reader)';
+
+/** Paint html/body, the top strip (--chrome) and the theme-color meta with the screen's color (computed value). */
 export function setChromeColor(screen: Screen): void {
   const root = document.documentElement;
-  const v = screen === 'reader' ? 'var(--bg-reader)' : 'var(--bg-app)';
+  const v = screenColor(screen);
   root.style.backgroundColor = v;
+  root.style.setProperty('--chrome', v);
   document.body.style.backgroundColor = v;
   const rgb = getComputedStyle(root).backgroundColor;
   // Stylesheet not applied yet: var() is unresolved (transparent -> '#000000'). Keep the static meta and retry once on load.
@@ -59,4 +70,27 @@ export async function setThemeSetting(t: ThemeSetting): Promise<boolean> {
   repaint();
   mirror(t);
   try { await setSetting('theme', t); return true; } catch { return false; }
+}
+
+/** The open page's background as sanitized by the caller ('#rrggbb'); anything else, or null, means unknown. */
+export function setBookBg(hex: string | null): void {
+  const v = hex !== null && /^#[0-9a-f]{6}$/.test(hex) ? hex : null;
+  if (v === bookBg) return;
+  bookBg = v;
+  if (current === 'reader') setChromeColor(current);
+}
+
+export async function initReaderChrome(): Promise<void> {
+  const saved = await getSetting('readerChrome').catch(() => null);
+  if (readerTouched || !isReaderChrome(saved)) return;
+  readerChrome = saved;
+  setChromeColor(current);
+}
+
+/** Apply immediately; resolves to false when saving failed (the choice then lasts for this session only). */
+export async function setReaderChrome(v: ReaderChrome): Promise<boolean> {
+  readerTouched = true;
+  readerChrome = v;
+  setChromeColor(current);
+  try { await setSetting('readerChrome', v); return true; } catch { return false; }
 }

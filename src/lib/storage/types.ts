@@ -12,8 +12,10 @@ export interface Issue { bookId: string; path: string; kind: IssueKind; count: n
 export interface Settings {
   librarySort: 'recent' | 'imported' | 'name' | 'progress'; progressLine: boolean; activeBookId: string | null;
   hintSeen: boolean; safetyNoticeSeen: boolean; theme: 'system' | 'light' | 'dark'; panelWidth: number; panelOpen: boolean;
+  readerChrome: 'book' | 'app'; // reader top strip: the book's background, or the app background (spec §6.6)
 }
 export const SETTING_DEFAULTS: Settings = {
   librarySort: 'recent', progressLine: true, activeBookId: null,
   hintSeen: false, safetyNoticeSeen: false, theme: 'system', panelWidth: 320, panelOpen: true,
+  readerChrome: 'book',
 };

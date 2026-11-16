@@ -1,16 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getSetting, setSetting } from '../../lib/storage';
-  import { setThemeSetting } from '../chrome';
+  import { setReaderChrome, setThemeSetting, type ReaderChrome } from '../chrome';
   import Icon from '../icons/Icon.svelte';
 
   let { onback }: { onback: () => void } = $props();
   let theme = $state<'system' | 'light' | 'dark'>('system');
+  let readerChrome = $state<ReaderChrome>('book');
   let progressLine = $state(true);
   let persisted = $state<boolean | null>(null);
 
   onMount(() => {
     void getSetting('theme').then((v) => (theme = v));
+    void getSetting('readerChrome').then((v) => (readerChrome = v));
     void getSetting('progressLine').then((v) => (progressLine = v));
     void Promise.resolve(navigator.storage?.persisted?.()).then((v) => (persisted = !!v), () => (persisted = false));
   });
@@ -20,6 +22,12 @@
     const prev = theme;
     theme = t;
     void setThemeSetting(t).then((ok) => { if (!ok && theme === t) theme = prev; });
+  }
+  const chromes = [['book', '책 배경 따라가기'], ['app', '앱 색']] as const;
+  function pickChrome(v: ReaderChrome) {
+    const prev = readerChrome;
+    readerChrome = v;
+    void setReaderChrome(v).then((ok) => { if (!ok && readerChrome === v) readerChrome = prev; });
   }
   function toggleLine() {
     const v = progressLine;
@@ -38,6 +46,15 @@
     <div class="seg" role="group" aria-label="화면 테마">
       {#each themes as [v, label] (v)}
         <button type="button" data-testid={`theme-${v}`} aria-pressed={theme === v} onclick={() => pick(v)}>{label}</button>
+      {/each}
+    </div>
+  </section>
+
+  <section>
+    <h2>리더 상단 색</h2>
+    <div class="seg" role="group" aria-label="리더 상단 색">
+      {#each chromes as [v, label] (v)}
+        <button type="button" data-testid={`reader-chrome-${v}`} aria-pressed={readerChrome === v} onclick={() => pickChrome(v)}>{label}</button>
       {/each}
     </div>
   </section>

@@ -4,7 +4,8 @@ import { parseAgentMessage, parseShellMessage, PROTOCOL_VERSION, wrap } from '..
 test('wrap', () => expect(wrap({ type: 'tap' })).toEqual({ app: 'html-reader', protocolVersion: PROTOCOL_VERSION, type: 'tap' }));
 test('유효한 agent 메시지', () => {
   for (const m of [{ type: 'ready', path: 'a/b.html', title: 'T' }, { type: 'scroll', pct: 62.5, ratio: 0.5 }, { type: 'tap' },
-    { type: 'key', key: 'b', mods: { ctrl: false, meta: false, alt: false, shift: false } }, { type: 'open-external', url: 'https://x.test/' }] as const)
+    { type: 'key', key: 'b', mods: { ctrl: false, meta: false, alt: false, shift: false } }, { type: 'open-external', url: 'https://x.test/' },
+    { type: 'bg', color: 'rgb(30, 32, 40)' }, { type: 'bg', color: null }] as const)
     expect(parseAgentMessage(wrap(m))).toEqual({ ok: true, msg: m });
 });
 test('문서가 보낸 남의 메시지', () => {
@@ -17,7 +18,8 @@ test('protocolVersion이 없는 메시지는 버전 불일치가 아니라 무�
 });
 test('형식 오류', () => {
   const bad = [{ type: 'ready', path: 1, title: 'T' }, { type: 'scroll', pct: 101, ratio: 0.5 }, { type: 'scroll', pct: 50, ratio: NaN },
-    { type: 'scroll', pct: 50, ratio: 1.2 }, { type: 'key', key: 'b' }, { type: 'open-external', url: 'javascript:alert(1)' }, { type: 'nope' }];
+    { type: 'scroll', pct: 50, ratio: 1.2 }, { type: 'key', key: 'b' }, { type: 'open-external', url: 'javascript:alert(1)' }, { type: 'nope' },
+    { type: 'bg' }, { type: 'bg', color: 5 }, { type: 'bg', color: 'x'.repeat(65) }];
   for (const m of bad) expect(parseAgentMessage({ app: 'html-reader', protocolVersion: PROTOCOL_VERSION, ...m })).toEqual({ ok: false, reason: 'invalid' });
 });
 test('셸 메시지', () => {

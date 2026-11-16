@@ -7,7 +7,8 @@ export type AgentMsg =
   | { type: 'scroll'; pct: number; ratio: number }
   | { type: 'tap' }
   | { type: 'key'; key: string; mods: Mods }
-  | { type: 'open-external'; url: string };
+  | { type: 'open-external'; url: string }
+  | { type: 'bg'; color: string | null }; // computed background of the page (raw CSS string; the shell sanitizes it)
 export type Restore = { scrollRatio: number } | { find: { query: string; snippet: string } } | { bookmark: { scrollRatio: number } };
 export type ShellMsg =
   | { type: 'init'; textScale: number; restore?: Restore }
@@ -47,6 +48,7 @@ function agent(o: Obj): AgentMsg | null {
       return { type: 'key', key: o.key, mods: { ctrl, meta, alt, shift } };
     }
     case 'open-external': return str(o.url) && SAFE_URL.test(o.url) ? { type: 'open-external', url: o.url } : null;
+    case 'bg': return o.color === null || (str(o.color) && o.color.length <= 64) ? { type: 'bg', color: o.color } : null;
   }
   return null;
 }

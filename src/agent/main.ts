@@ -6,6 +6,7 @@ import { findScroller, metrics, scrollToRatio, watchScroller } from './scroller'
 import { installTap } from './tap';
 import { installKeys } from './keys';
 import { findAndReveal } from './find';
+import { watchBg } from './bg';
 import { parseShellMessage, wrap, type AgentMsg } from '../lib/protocol';
 
 const script = document.currentScript as HTMLScriptElement | null;
@@ -42,6 +43,7 @@ function start(): void {
   installTap(send);
   installKeys(send);
   let el = findScroller();
+  let checkBg = () => {};
   let queued = false;
   const target = () => (el === document.scrollingElement ? window : el);
   const report = () => {
@@ -55,11 +57,13 @@ function start(): void {
     target().removeEventListener('scroll', onScroll);
     el = next;
     target().addEventListener('scroll', onScroll, { passive: true });
+    checkBg();
   };
   target().addEventListener('scroll', onScroll, { passive: true });
   watchScroller(track);
 
   send({ type: 'ready', path: bookPath(), title: document.title });
+  checkBg = watchBg(send, () => el);
 
   let stopRestore = () => {};
   let moved = false; // a shell scroll-to (bookmark jump, handle, top/bottom) wins over the pending restore (§6.7-3)
@@ -98,7 +102,7 @@ function start(): void {
   });
 
   // First-screen progress even without scrolling; non-scrolling pages count as fully read.
-  whenStable(() => { track(findScroller()); const m = metrics(el); send({ type: 'scroll', pct: m.pct, ratio: m.ratio }); });
+  whenStable(() => { track(findScroller()); checkBg(); const m = metrics(el); send({ type: 'scroll', pct: m.pct, ratio: m.ratio }); });
 }
 
 if (isActive()) {
