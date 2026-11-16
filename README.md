@@ -19,11 +19,12 @@ HTML Reader opens ZIP bundles of HTML documents (internal docs, reports, offline
 - **Runs as authored**: links between pages, JSON loaded with `fetch()`, ES modules, CSS `url()` and `@font-face`, root-absolute paths (`/css/a.css`) and EUC-KR documents all work.
 - **Pick up where you left off**: reading progress is saved per page, and each book reopens at your last position.
 - **Find your way**: a file-tree panel, a fast-scroll handle, and full-text search across the whole book.
-- **Comfortable reading**: bookmarks, text size, light and dark app themes, keyboard shortcuts on desktop.
+- **Comfortable reading**: bookmarks (with undo), text size, light and dark app themes, keyboard shortcuts on desktop.
+- **Back works as expected**: the browser/Android back button leaves the reader in one step (an open sheet closes first), while a document's own back links still move within the document.
 - **Library**: re-import a revised version in place, rename books, search and sort the library.
 - **Open directly**: the installed app opens `.zip`/`.html` files on desktop (file handlers) and accepts shared files on Android (share target).
 - **Offline and local only**: documents never leave the device; nothing is uploaded to a server.
-- **Screen space**: on mobile the document takes the whole screen until you tap; on desktop (768px and wider) the top bar and file panel stay visible (`T` collapses the panel). On iOS 26 the status-bar area is painted with the app background so the document never shows through it.
+- **Screen space**: on mobile the document takes the whole screen until you tap; on desktop (768px and wider) the top bar and file panel stay visible (`T` collapses the panel). On iOS 26 the status-bar area is painted with a solid color so the document never shows through it: in the reader it follows the document's own background by default, or the app color (Settings → 리더 상단 색).
 
 ## Development
 
@@ -36,6 +37,7 @@ HTML Reader opens ZIP bundles of HTML documents (internal docs, reports, offline
 | E2E | `npm run e2e` (= `playwright test`); one spec: `npx playwright test tests/e2e/<name>.spec.ts --project=chromium` |
 | Bundle budget | `npm run size` (= `node scripts/check-size.mjs`) |
 | App icons | `node scripts/make-icons.mjs` (renders the PNGs from `public/__app/icons/icon.svg`) |
+| Font subsets | `python3 scripts/subset-fonts.py` (needs `fonttools` and `brotli`; splits `scripts/font-src/PretendardVariable.woff2` into the unicode-range files in `public/__app/fonts/`) |
 
 E2E always runs against the production build served by `tests/server/static-server.mjs` (never the dev server), which mirrors the rewrites in `vercel.json`.
 
@@ -75,7 +77,7 @@ Accepted trade-offs:
 These cannot be verified by the automated tests.
 
 - [ ] iOS Safari tab: on the library screen the top bar is the app background color (#EEF0F4 / dark #101216) and content never shows through it while scrolling
-- [ ] iOS Safari tab: on the reader screen the top bar is white (black in dark mode) and document content never shows under the status bar
+- [ ] iOS Safari tab: on the reader screen the top bar matches the document background (white/black when it has none; the app color with Settings → 리더 상단 색 → 앱 색) and document content never shows under the status bar
 - [ ] iOS home-screen app: the two items above hold, and the status-bar text (clock) is visible in both light and dark
 - [ ] iOS home-screen app: the home indicator overlays the document with no extra margin strip
 - [ ] In an iOS Safari tab, tapping Import shows the add-to-home-screen notice first
@@ -83,6 +85,7 @@ These cannot be verified by the automated tests.
 - [ ] iOS and Android: pinch zoom works on documents
 - [ ] iOS and Android: video in a document plays and can seek
 - [ ] With airplane mode on, reopening the app still lets you read books
+- [ ] Android: with the file panel or search open, back closes it first; the next back returns to the library
 - [ ] Android (installed app): sharing a ZIP from a file manager and choosing HTML Reader imports it (at least two file managers)
 - [ ] Android (installed app): when a large ZIP share fails, the "앱에서 직접 가져오기를 이용하세요" (use Import in the app) notice appears
 - [ ] Windows/macOS Chrome or Edge (installed app): opening a .zip/.html file with "Open with → HTML Reader" imports it
