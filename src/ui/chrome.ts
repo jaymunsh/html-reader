@@ -20,7 +20,8 @@ export function setChromeColor(screen: Screen): void {
   const rgb = getComputedStyle(root).backgroundColor;
   // Stylesheet not applied yet: var() is unresolved (transparent -> '#000000'). Keep the static meta and retry once on load.
   if (/^rgba\(.*,\s*0\)$|^transparent$/.test(rgb)) { addEventListener('load', () => setChromeColor(current), { once: true }); return; }
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', hex(rgb));
+  // Every per-scheme meta gets the same value, so a forced theme that differs from the system scheme still tints the browser UI.
+  document.querySelectorAll('meta[name=theme-color]').forEach((m) => m.setAttribute('content', hex(rgb)));
 }
 
 type ThemeSetting = 'system' | 'light' | 'dark';

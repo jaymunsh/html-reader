@@ -3,7 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#EEF0F4" />
+    <meta name="theme-color" content="#EEF0F4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#101216" media="(prefers-color-scheme: dark)" />
+    <!-- First-frame theme: mirrors bootTheme()/applyTheme() in src/ui/chrome.ts (localStorage 'theme', else the system scheme). -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('theme');
+          if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          document.documentElement.dataset.theme = t;
+          var c = t === 'dark' ? '#101216' : '#EEF0F4', m = document.querySelectorAll('meta[name=theme-color]');
+          for (var i = 0; i < m.length; i++) m[i].setAttribute('content', c);
+        } catch (e) {}
+      })();
+    </script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />

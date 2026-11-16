@@ -78,3 +78,15 @@ test('CSS가 늦게 도착해도 theme-color가 #000000으로 칠해지지 않�
   expect(await meta()).not.toBe('#000000');
   await expect.poll(meta, { timeout: 10_000 }).toBe('#eef0f4');
 });
+
+test('저장된 다크 테마는 모듈 스크립트 이전(첫 프레임)에 적용된다', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.addInitScript(() => { try { localStorage.setItem('theme', 'dark'); } catch { /* ignore */ } });
+  await page.route('**/*.js', (route) => route.abort());                 // 앱 번들이 못 오게 막아 인라인 스크립트만 본다
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect.poll(() => page.evaluate(() => ({
+    theme: document.documentElement.dataset.theme,
+    html: getComputedStyle(document.documentElement).backgroundColor,
+    metas: [...document.querySelectorAll('meta[name=theme-color]')].map((m) => m.getAttribute('content')!.toLowerCase()),
+  }))).toEqual({ theme: 'dark', html: 'rgb(16, 18, 22)', metas: ['#101216', '#101216'] });
+});
