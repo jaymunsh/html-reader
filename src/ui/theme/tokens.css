@@ -35,4 +35,5 @@
   --scrim: rgba(0,0,0,0.5);
   color-scheme: dark;
 }
-body { margin: 0; color: var(--text); font-family: var(--font); }
+/* App shell only (book content lives in the iframe): keep Korean words together, break only when a word cannot fit. */
+body { margin: 0; color: var(--text); font-family: var(--font); word-break: keep-all; overflow-wrap: anywhere; }
