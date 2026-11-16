@@ -115,7 +115,7 @@
     background: var(--surface); color: var(--text);
   }
   .panel:not(.dock) {
-    left: 0; right: 0; bottom: 0; height: 70vh; border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+    left: 0; right: 0; bottom: 0; height: 70vh; height: 70dvh; border-radius: var(--r-sheet) var(--r-sheet) 0 0;
     padding-bottom: var(--sab); transform: translateY(100%); transition: transform .25s ease;
   }
   .panel:not(.dock).open { transform: none; }

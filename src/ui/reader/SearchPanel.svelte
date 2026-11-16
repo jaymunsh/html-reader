@@ -151,13 +151,13 @@
   .drop, .expanded .pop {
     background: var(--surface); color: var(--text); border: 1px solid var(--hairline); border-radius: var(--r-control); box-shadow: var(--shadow-card);
   }
-  .drop { position: absolute; top: calc(100% + 6px); left: 0; width: max(100%, 360px); max-height: min(70vh, 560px); overflow: auto; overscroll-behavior: contain; }
+  .drop { position: absolute; top: calc(100% + 6px); left: 0; width: max(100%, 360px); max-height: min(70vh, 560px); max-height: min(70dvh, 560px); overflow: auto; overscroll-behavior: contain; }
   /* Narrow bar (dock open on a small window): a 44px toggle; expanded, the input and results drop under the bar's right side. */
   @container topbar (max-width: 639px) {
     .dd { position: static; flex: none; min-width: 0; }
     .toggle { display: grid; }
     .pop { display: none; }
     .expanded .pop { display: block; position: absolute; top: calc(100% + 6px); right: 8px; width: min(420px, calc(100% - 16px)); padding: 8px; box-sizing: border-box; }
-    .drop { position: static; width: auto; margin-top: 8px; border: 0; box-shadow: none; max-height: min(60vh, 520px); }
+    .drop { position: static; width: auto; margin-top: 8px; border: 0; box-shadow: none; max-height: min(60vh, 520px); max-height: min(60dvh, 520px); }
   }
 </style>

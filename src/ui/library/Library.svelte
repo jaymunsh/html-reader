@@ -266,7 +266,7 @@
 
 <style>
   main {
-    min-height: 100vh; box-sizing: border-box; color: var(--text);
+    min-height: 100vh; min-height: 100dvh; box-sizing: border-box; color: var(--text);
     padding: calc(20px + var(--sat)) max(16px, env(safe-area-inset-right)) calc(64px + var(--sab) + 24px) max(16px, env(safe-area-inset-left));
   }
   main.desk { padding-left: 32px; padding-right: 32px; }

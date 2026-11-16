@@ -57,7 +57,7 @@
 </main>
 
 <style>
-  main { min-height: 100vh; box-sizing: border-box; padding: calc(8px + var(--sat)) 16px 24px; max-width: 640px; margin: 0 auto; }
+  main { min-height: 100vh; min-height: 100dvh; box-sizing: border-box; padding: calc(8px + var(--sat)) 16px 24px; max-width: 640px; margin: 0 auto; }
   header { display: flex; align-items: center; gap: 4px; min-height: 52px; }
   h1 { font-size: 20px; font-weight: 700; margin: 0; }
   h2 { font-size: 13px; font-weight: 600; color: var(--text-3); margin: 0 0 8px 4px; }

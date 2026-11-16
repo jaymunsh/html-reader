@@ -54,7 +54,7 @@
   }
   .layer.desk { align-items: center; padding: 24px; }
   .dialog {
-    box-sizing: border-box; width: 100%; max-height: 85vh; overflow-y: auto; overscroll-behavior: contain;
+    box-sizing: border-box; width: 100%; max-height: 85vh; max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain;
     padding: 24px 20px calc(16px + var(--sab)); background: var(--surface); color: var(--text);
     border-radius: var(--r-sheet) var(--r-sheet) 0 0; outline: none;
     animation: rise .28s cubic-bezier(.2, .8, .2, 1) both;

@@ -45,7 +45,7 @@
   }
   .sheet.open { visibility: visible; transform: none; opacity: 1; transition: transform .25s ease, opacity .25s ease; }
   .bottom {
-    left: 0; right: 0; bottom: 0; max-height: 70vh; margin: 0 auto; max-width: 560px; padding-bottom: var(--sab);
+    left: 0; right: 0; bottom: 0; max-height: 70vh; max-height: 70dvh; margin: 0 auto; max-width: 560px; padding-bottom: var(--sab);
     border-radius: var(--r-sheet) var(--r-sheet) 0 0; transform: translateY(100%);
   }
   .fullscreen { inset: 0; padding: var(--sat) 0 var(--sab); opacity: 0; transform: translateY(16px); }
