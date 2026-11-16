@@ -34,10 +34,11 @@ function bookPath(): string {
   return p.normalize('NFC');
 }
 
+let pushTo = (url: string) => location.replace(url);
 const send = (msg: AgentMsg) => parent.postMessage(wrap(msg), location.origin);
 
 function start(): void {
-  installLinkHandling(send);
+  installLinkHandling(send, pushTo);
   installTap(send);
   installKeys(send);
   let el = findScroller();
@@ -101,7 +102,7 @@ function start(): void {
 }
 
 if (isActive()) {
-  installHistory(realSession, bookId); // before any document script runs
+  pushTo = installHistory(realSession, bookId); // before any document script runs
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 }

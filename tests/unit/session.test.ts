@@ -73,7 +73,7 @@ test('foreign messages are ignored (no version, wrong source/origin)', () => {
   post(win, agentMsg({ type: 'ready', path: 'x', title: 'y' }), 'https://evil.test');
   post({}, agentMsg({ type: 'ready', path: 'x', title: 'y' }));
   expect(states).toEqual([]);
-  expect(store.size).toBe(0);
+  expect(store.has('update-wanted')).toBe(false);
   expect(h.onPage).not.toHaveBeenCalled();
 });
 
@@ -138,6 +138,7 @@ test('첫 이동은 src, 이후 쪽 이동은 location.replace(기록을 쌓지 
   s.navigate('index.html');
   expect((iframe as any).src).toBe('/book/b1/index.html');
   expect(replace).not.toHaveBeenCalled();
+  expect(JSON.parse(store.get('hr-frame-history:b1')!)).toMatchObject({ p: 1 }); // a new entry of the book's own history
   s.navigate('sub/page 2.html');
   expect(replace).toHaveBeenCalledWith('/book/b1/sub/page%202.html');
   expect((iframe as any).src).toBe('/book/b1/index.html');

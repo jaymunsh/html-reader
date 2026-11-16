@@ -10,7 +10,7 @@ function linkOf(e: MouseEvent): { a: Element; url: URL } | null {
   try { return { a, url: new URL(a.getAttribute('href') ?? '', a.ownerDocument.baseURI) }; } catch { return null; }
 }
 
-export function installLinkHandling(send: (m: AgentMsg) => void): void {
+export function installLinkHandling(send: (m: AgentMsg) => void, pushTo: (url: string) => void): void {
   document.addEventListener('click', (e) => {
     if (e.defaultPrevented) return;
     const l = linkOf(e);
@@ -32,6 +32,6 @@ export function installLinkHandling(send: (m: AgentMsg) => void): void {
     const t = l.a.getAttribute('target');
     if (t && !/^_self$/i.test(t)) return; // a named frame inside the document
     e.preventDefault();
-    location.replace(l.url.href);
+    pushTo(l.url.href);
   });
 }

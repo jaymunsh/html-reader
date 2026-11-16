@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
+import { strToU8, zipSync } from 'fflate';
 import { backToLibrary, importFixture, openBook, openOverlay } from './helpers';
 
 // A page before the app, so "back leaves the app" is observable.
@@ -147,6 +148,38 @@ test('해시 라우터·pushState 문서: 문서 안 뒤로 가기는 그 안에
   await page.getByTestId('reader-back').click();                                        // 오버레이 뒤로 → 한 번에 서재
   await expect(page.getByTestId('library')).toBeVisible();
   await expect.poll(() => page.evaluate(() => history.state)).toBeNull();
+  await back(page);
+  await leftApp(page);
+});
+
+test('리다이렉트 스텁(location.replace) 문서: 문서 안 뒤로 가기가 스텁에 갇히지 않는다', async ({ page }, info) => {
+  const html = (body: string) => strToU8(`<!doctype html><html><head><meta charset="utf-8"><title>t</title></head><body>${body}</body></html>`);
+  const file = info.outputPath('redirect-stub.zip');
+  writeFileSync(file, zipSync({
+    'index.html': html('<script>location.replace("start.html")</script>'),
+    'start.html': html('<h1 id="h">start</h1><a id="next" href="next.html">next</a>'),
+    'next.html': html('<h1 id="h">next</h1><a id="stub" href="index.html">stub</a>'),
+  }));
+  await page.goto(START);
+  await page.goto('/');
+  const id = await importFixture(page, file);
+  const f = await openBook(page, id);
+  const reader = page.getByTestId('reader');
+  const at = async (p: string) => { await expect(reader).toHaveAttribute('data-path', p); await expect(reader).toHaveAttribute('data-agent', 'ready'); };
+  await at('start.html');
+  await f.locator('#next').click();
+  await at('next.html');
+  await f.locator('#stub').click();                                                     // 스텁을 거쳐 다시 start
+  await at('start.html');
+  await f.evaluate(() => history.back());
+  await at('next.html');
+  await f.evaluate(() => history.back());
+  await at('start.html');
+  await f.evaluate(() => history.back());                                               // 첫 항목: 더 가지 않는다
+  await page.waitForTimeout(500);
+  await at('start.html');
+  await back(page);
+  await expect(page.getByTestId('library')).toBeVisible();
   await back(page);
   await leftApp(page);
 });

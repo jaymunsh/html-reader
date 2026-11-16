@@ -1,4 +1,5 @@
 import { cacheKey } from '../../lib/path';
+import { markPush } from '../../lib/frame-history';
 import { APP_TAG, parseAgentMessage, wrap, type Mods, type Restore, type ShellMsg } from '../../lib/protocol';
 
 export type AgentState = 'pending' | 'ready' | 'limited';
@@ -94,6 +95,9 @@ export function createSession(iframe: HTMLIFrameElement, bookId: string, hooks: 
       const url = cacheKey(bookId, path);
       // Page changes replace the frame's history entry: back leaves the reader in one step instead of walking the pages.
       // The first load leaves the frame's initial about:blank, which never adds an entry.
+      let store: Storage | null = null;
+      try { store = sessionStorage; } catch { /* blocked */ }
+      markPush(store, bookId); // a new entry of the book's own history, though the frame entry is replaced
       const win = started ? iframe.contentWindow : null;
       started = true;
       if (win) {

@@ -3,17 +3,19 @@
 // agent keeps in the real sessionStorage (the shell clears it when a book opens): back / forward / go traverse it with
 // location.replace, a pushState adds to it, and going back past the first page does nothing (never pops the shell's entry).
 
-import { frameHistoryKey } from '../lib/frame-history';
+import { frameHistoryKey, markPush } from '../lib/frame-history';
 
 type Entry = { u: string; d: string };               // url, id of the document that recorded it
-type Stack = { e: Entry[]; i: number; t?: number };  // t: target of a cross-document traversal in flight
+// t: target of a cross-document traversal in flight; p: the next load is a new entry (markPush); n: history.length when recorded
+type Stack = { e: Entry[]; i: number; t?: number; p?: 1; n?: number };
 
 const MAX = 100;
 const DOC = Math.random().toString(36).slice(2);
 const states = new Map<string, unknown>(); // history.state of this document's same-document entries, by url
 const noHash = (u: string) => u.replace(/#.*$/, '');
 
-export function installHistory(store: Storage | null, bookId: string): void {
+/** Returns the agent's own push: a navigation that becomes a new entry of the stack while replacing the frame's entry. */
+export function installHistory(store: Storage | null, bookId: string): (url: string) => void {
   const key = frameHistoryKey(bookId);
   const H = History.prototype;
   const realReplace = H.replaceState;
@@ -26,20 +28,27 @@ export function installHistory(store: Storage | null, bookId: string): void {
   };
   const write = (s: Stack) => { try { store?.setItem(key, JSON.stringify(s)); } catch { /* storage full or blocked */ } };
 
-  /** The document is at a URL now: a traversal landing, a replace of the current entry, a reload, or a new entry. */
-  const record = (replace = false) => {
-    const s = read(), u = location.href, cur = s.e[s.i];
+  const hasNav = 'navigation' in window;
+  /**
+   * The document is at a URL now: a traversal landing, a new entry (a marked push, a pushState, or — without the Navigation
+   * API — a real entry the browser added), else a replace of the current entry (reload, location.replace, meta refresh).
+   */
+  const record = (kind?: 'push' | 'replace') => {
+    const s = read(), u = location.href, cur = s.e[s.i], n = history.length;
+    const pushed = kind === 'push' || (kind !== 'replace' && (!!s.p || (!hasNav && n > (s.n ?? n))));
     if (s.t !== undefined && s.e[s.t]?.u === u) { s.i = s.t; s.e[s.i].d = DOC; }
-    else if ((replace || cur?.u === u) && cur) { cur.u = u; cur.d = DOC; }
+    else if (cur && (cur.u === u || !pushed)) { cur.u = u; cur.d = DOC; }
     else {
       s.e = s.e.slice(0, s.i + 1).concat({ u, d: DOC });
       const over = s.e.length - MAX;
       if (over > 0) s.e.splice(0, over);
       s.i = s.e.length - 1;
     }
-    delete s.t;
+    delete s.t; delete s.p;
+    s.n = n;
     write(s);
   };
+  const pushTo = (url: string) => { markPush(store, bookId); location.replace(url); };
 
   const go = (n?: unknown) => {
     const k = Math.trunc(Number(n)) || 0;
@@ -68,12 +77,12 @@ export function installHistory(store: Storage | null, bookId: string): void {
   def('pushState', function (this: History, data: unknown, unused: string, url?: string | URL | null) {
     realReplace.call(this, data, unused, url);
     states.set(location.href, data);
-    record();
+    record('push');
   });
   def('replaceState', function (this: History, data: unknown, unused: string, url?: string | URL | null) {
     realReplace.call(this, data, unused, url);
     states.set(location.href, data);
-    record(true);
+    record('replace');
   });
   addEventListener('hashchange', () => record());
   addEventListener('popstate', () => record()); // only real entries (browsers without the Navigation API)
@@ -89,6 +98,7 @@ export function installHistory(store: Storage | null, bookId: string): void {
     try { u = new URL(e.destination.url); } catch { return; }
     if (u.origin !== location.origin) return;
     e.preventDefault();
-    location.replace(u.href);
+    pushTo(u.href);
   });
+  return pushTo;
 }

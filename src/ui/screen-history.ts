@@ -15,28 +15,45 @@ export function currentEntry(): ScreenEntry | null {
 
 const key = (e: ScreenEntry | null) => JSON.stringify(e);
 
-// A UI exit pops our entries with history.go(); its popstate is ours, not the user's. Anything requested meanwhile waits for
-// it (pushing first would let that traversal pop the new entry instead).
+// A UI exit pops our entries with history.go(); its popstate is ours, not the user's. Operations run one at a time: one
+// requested while a traversal is in flight waits for it (a push first would be popped by it; two pops would overlap).
 let ours: (() => void) | null = null;
 let busy: Promise<void> | null = null;
+let queue: Promise<void> = Promise.resolve();
+let queued = 0;
 const POP_WAIT_MS = 600;
 
-function after(run: () => void): void { if (busy) void busy.then(run); else run(); }
+function after(run: () => void): void {
+  if (!busy && !queued) { run(); return; } // idle: synchronous, so a push stays within the click's user activation
+  queued++;
+  queue = queue.then(async () => {
+    while (busy) await busy;
+    queued--;
+    try { run(); } catch { /* history unavailable */ }
+  });
+}
 
 /**
- * Go back `steps` entries to `target`. If no popstate arrives (the traversal was spent on a frame entry a document added,
- * or never happened), the entry we meant to leave is rewritten to the target, so the state is never left stale.
+ * Go back `steps` entries to `target`. If no popstate arrives, the traversal was spent on a frame entry a document left
+ * (or never happened): go back once more, then, if still nowhere, rewrite the entry we meant to leave to the target, so the
+ * state is never left stale.
  */
 function popTo(steps: number, target: ScreenEntry | null): void {
   const from = key(currentEntry());
   busy = new Promise<void>((resolve) => {
-    const finish = (timedOut: boolean) => {
-      clearTimeout(t);
-      if (timedOut && key(currentEntry()) === from) history.replaceState(target, '', '/');
-      ours = null; busy = null; resolve();
+    let t: ReturnType<typeof setTimeout> | undefined;
+    let retried = false;
+    const finish = () => { clearTimeout(t); ours = null; busy = null; resolve(); };
+    const wait = () => {
+      t = setTimeout(() => {
+        if (key(currentEntry()) !== from) { finish(); return; }
+        if (!retried) { retried = true; history.go(-1); wait(); return; }
+        history.replaceState(target, '', '/');
+        finish();
+      }, POP_WAIT_MS);
     };
-    const t = setTimeout(() => finish(true), POP_WAIT_MS);
-    ours = () => finish(false);
+    ours = finish;
+    wait();
   });
   history.go(-steps);
 }
