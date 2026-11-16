@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { backToLibrary, idbAll, importFixture, openBook, scrollFrameTo, startImport } from './helpers';
+import { backToLibrary, holdImports, idbAll, importFixture, openBook, scrollFrameTo, releaseImports, startImport } from './helpers';
 const order = (page: any) => page.getByTestId('book-card').evaluateAll((els: Element[]) => els.map((e) => e.getAttribute('data-title')));
 
 test('서재 검색·정렬, 마지막 선택 저장', async ({ page }) => {
@@ -31,9 +31,11 @@ test('서재 검색·정렬, 마지막 선택 저장', async ({ page }) => {
 
   // K13: while importing, the progress replaces the input; the query is kept.
   await page.getByTestId('library-search').fill('EUCKR');
+  await holdImports(page);
   await startImport(page, 'big.zip');
   await expect(page.getByTestId('import-progress')).toBeVisible();
   await expect(page.getByTestId('library-search')).toHaveCount(0);
+  await releaseImports(page);
   await expect(page.getByTestId('import-progress')).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByTestId('library-search')).toHaveValue('EUCKR');
 });

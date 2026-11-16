@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { backToLibrary, importFixture, openBook, startImport } from './helpers';
+import { backToLibrary, holdImports, importFixture, openBook, releaseImports, startImport } from './helpers';
 
 const use = (request: any, dir: string) => request.post(`/__test/use?dir=${dir}`);
 test.beforeEach(async ({ request }) => { await use(request, 'dist'); });
@@ -53,9 +53,11 @@ test('가져오는 중에는 업데이트 적용 버튼이 비활성이다', asy
   await use(request, 'dist-v2');
   await page.evaluate(async () => { await (await navigator.serviceWorker.getRegistration())!.update(); });
   await expect(page.getByTestId('update-apply')).toBeEnabled({ timeout: 15_000 });
+  await holdImports(page);
   await startImport(page, 'big.zip');
   await expect(page.getByTestId('import-progress')).toBeVisible();
   await expect(page.getByTestId('update-apply')).toBeDisabled();
+  await releaseImports(page);
   await expect(page.getByTestId('book-card')).toHaveCount(2, { timeout: 30_000 });
   await expect(page.getByTestId('update-apply')).toBeEnabled();
 });

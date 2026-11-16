@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { backToLibrary, fixture, idbAll, importFixture, openBook, scrollFrameTo, startImport } from './helpers';
+import { backToLibrary, fixture, holdImports, idbAll, importFixture, openBook, scrollFrameTo, startImport } from './helpers';
 
 // Awaited (not racy) pass through the iOS notices, which appear only under an iPhone UA.
 async function passIosNotices(page: Page) {
@@ -68,6 +68,7 @@ test('시작 시 고아 캐시·고아 레코드를 정리하고 book이 가리�
 test('가져오기 도중 새로고침해도 가리키는 곳 없는 캐시가 남지 않는다', async ({ page }) => {
   await page.goto('/');
   await importFixture(page, '10-single.html');                              // 고지를 미리 통과
+  await holdImports(page);                                                  // 캐시는 썼고 커밋은 안 된 순간에 멈춘다
   await startImport(page, 'big.zip');
   await expect(page.getByTestId('import-progress')).toBeVisible();
   await page.reload();

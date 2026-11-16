@@ -35,6 +35,22 @@ export async function idbAll(page: Page, store: string): Promise<any[]> {
 }
 
 /** Pick the file and click through the entry dialogs (iOS notices, safety notice). Does not wait for the result. */
+/**
+ * Hold the next import(s) just before commit (cache written, book not committed) until releaseImports(). Imports finish
+ * in a few hundred ms, so tests that need to observe or interrupt an in-flight import must hold it. E2E builds only.
+ */
+export async function holdImports(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const t = (window as any).__hrTest;
+    t.held = new Promise<void>((r) => { t.release = r; });
+    t.beforeCommit = () => t.held;
+  });
+}
+
+export async function releaseImports(page: Page): Promise<void> {
+  await page.evaluate(() => { const t = (window as any).__hrTest; t.beforeCommit = undefined; t.release(); });
+}
+
 export async function startImport(page: Page, name: string | string[]): Promise<void> {
   await page.getByTestId('import-input').setInputFiles(typeof name === 'string' ? fixture(name) : name.map(fixture));
   const dialogs = [

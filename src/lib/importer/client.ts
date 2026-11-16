@@ -18,6 +18,8 @@ export interface ImportHooks {
  */
 async function commitReady(p: ReadyPayload, terminate: () => void): Promise<string> {
   try {
+    // e2e-only: lets a test hold an import in its in-flight window (cache written, not committed); stripped in prod builds.
+    if (import.meta.env.VITE_E2E) await (globalThis as any).__hrTest?.beforeCommit?.();
     const ok = await verifyCacheReady(caches, p);
     terminate();
     if (!ok) throw new ImportError('failed', 'cache verification timed out');
