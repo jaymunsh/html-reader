@@ -254,6 +254,7 @@
         issueTimer = setTimeout(refreshIssues, 700);
         title = t ?? book?.title ?? '';
         firstPath = null;
+        focusDocument();
         void updateBook(bookId, { lastPath: p, lastOpenedAt: Date.now() }).catch(() => {});
       },
       onScroll: (pct, ratio) => {
@@ -281,6 +282,15 @@
       onNoSw: () => { notice = 'unsupported'; },
     });
     session.navigate(start);
+  }
+
+  // Desktop: arrows / PgDn scroll the document right after it opens or the page changes — but only when nothing in the shell
+  // holds focus (never steal it from the search field, a dialog or a focused control).
+  function focusDocument() {
+    if (!layout.desktop || sheet || !iframe) return;
+    const a = document.activeElement;
+    if (a && a !== document.body && a !== iframe) return;
+    try { iframe.contentWindow?.focus(); } catch { /* ignore */ }
   }
 
   let dragHold: (() => void) | null = null;
