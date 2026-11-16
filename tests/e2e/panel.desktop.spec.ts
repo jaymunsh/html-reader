@@ -38,3 +38,23 @@ test('창 폭이 1024px 미만이면 접힌 상태로 시작한다', async ({ pa
   await openBook(page, id);
   await expect(page.getByTestId('panel')).toHaveAttribute('data-open', 'false');
 });
+
+test('PC 패널 폭 조절: 끄는 동안은 안내선만 움직이고 문서 폭은 놓을 때 바뀐다', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  const id = await importFixture(page, '01-multipage.zip');
+  await openBook(page, id);
+  const panel = page.getByTestId('panel'), frame = page.getByTestId('reader-frame');
+  await expect(panel).toHaveAttribute('data-open', 'true');
+  const r = (await page.getByTestId('panel-resizer').boundingBox())!;
+  await page.mouse.move(r.x + 2, 300); await page.mouse.down(); await page.mouse.move(r.x - 98, 300);
+  const g = (await page.getByTestId('panel-resize-guide').boundingBox())!;
+  expect(Math.round(1280 - g.x - g.width / 2)).toBe(420);                                    // 안내선은 새 폭 위치
+  expect((await panel.boundingBox())!.width).toBe(320);                                      // 패널·iframe은 그대로
+  expect(Math.round((await frame.boundingBox())!.width)).toBe(960);
+  await page.mouse.up();
+  await expect(page.getByTestId('panel-resize-guide')).toHaveCount(0);
+  expect((await panel.boundingBox())!.width).toBe(420);
+  expect(Math.round((await frame.boundingBox())!.width)).toBe(860);
+  await expect.poll(() => idbGet(page, 'settings', 'panelWidth')).toBe(420);
+});

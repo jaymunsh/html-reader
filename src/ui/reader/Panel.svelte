@@ -30,18 +30,25 @@
     if (layout.desktop) onEscape?.(); else onClose();
   }
 
+  // Resize: while dragging only a guide line moves (the book would reflow on every pointermove); the width applies on release.
   let grabX = 0;
   let startW = 0;
-  let dragging = false;
+  let guide = $state<number | null>(null); // the width the drag would apply
   function down(e: PointerEvent) {
     if (e.button !== 0) return;
     try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
-    dragging = true; grabX = e.clientX; startW = applied;
+    grabX = e.clientX; startW = applied; guide = applied;
   }
   function move(e: PointerEvent) {
-    if (dragging) width = Math.min(max, Math.max(PANEL_MIN, Math.round(startW + grabX - e.clientX)));
+    if (guide !== null) guide = Math.min(max, Math.max(PANEL_MIN, Math.round(startW + grabX - e.clientX)));
   }
-  function up() { if (dragging) { dragging = false; onWidthCommit?.(width); } }
+  function up() {
+    if (guide === null) return;
+    const w = guide;
+    guide = null;
+    if (w !== applied) { width = w; onWidthCommit?.(w); }
+  }
+  function cancel() { guide = null; }
 </script>
 
 {#if !layout.desktop}
@@ -52,7 +59,8 @@
   aria-label="패널" style:width={layout.desktop ? `${applied}px` : null} {onkeydown}>
   {#if layout.desktop}
     <div class="resizer" data-testid="panel-resizer" role="separator" aria-orientation="vertical" aria-label="패널 폭"
-      onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up}></div>
+      onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={cancel}></div>
+    {#if guide !== null}<div class="guide" data-testid="panel-resize-guide" aria-hidden="true" style:left={`${applied - guide - 2}px`}></div>{/if}
   {:else}
     <div class="grabber" aria-hidden="true"></div>
   {/if}
@@ -89,6 +97,8 @@
   .dock:not(.open) { visibility: hidden; }
   .grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--hairline); margin: 8px auto 0; flex: none; }
   .resizer { position: absolute; left: -4px; top: 0; bottom: 0; width: 10px; cursor: col-resize; touch-action: none; z-index: var(--z-local); }
+  /* Centered on the new left edge (offsets: the 1px border and half the 2px line). */
+  .guide { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; z-index: var(--z-local); }
   .head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex: none; }
   .seg { flex: 1; display: flex; padding: 2px; border-radius: var(--r-control); background: var(--bg-app); }
   .seg button { flex: 1; min-height: 44px; border: 0; border-radius: var(--r-control); background: none; color: var(--text-2); font: inherit; }
