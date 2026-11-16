@@ -1,8 +1,9 @@
 import { ImportError, toImportError } from './errors';
 import { isHtmlPath, pickEntryPath, planEntries, precheck, sourceNameOf } from './plan';
 import { dedupeTitle, defaultTitle } from '../title';
-import { decodeHtml, detectEncoding, extractTitle, isFullDocument } from '../html-meta';
-import { extractText } from '../text-extract';
+import { decodeHtml, extractTitle, isFullDocument } from '../html-meta';
+import { htmlToText } from '../text-extract';
+import { createPool } from './pool';
 import { mimeFor } from '../mime';
 import { cacheKey, naturalComparePaths } from '../path';
 import { readCentralDirectory, readEntry } from '../zip';
@@ -14,6 +15,8 @@ import type { ImportMode } from './client';
 
 type In = { type: 'start'; file: File; mode: ImportMode } | { type: 'entry'; path: string | null };
 const post = (m: unknown) => (self as unknown as Worker).postMessage(m);
+
+const PUT_CONCURRENCY = 4;
 
 interface Item { path: string; size: number; read(onBytes: (n: number) => void): Promise<Blob> }
 
@@ -70,22 +73,25 @@ async function run(file: File, mode: ImportMode): Promise<ReadyPayload> {
       const now = Date.now();
       if (now - lastPost > 50 || done >= total) { lastPost = now; post({ type: 'progress', done, total }); }
     };
+    const pool = createPool(PUT_CONCURRENCY);
     for (const item of items) {
       const blob = await item.read(onBytes);
       let type = mimeFor(item.path);
       if (isHtmlPath(item.path)) {
         const bytes = new Uint8Array(await blob.arrayBuffer());
         if (isFullDocument(bytes)) pagePaths.push(item.path);
-        titles[item.path] = extractTitle(decodeHtml(bytes).html);
-        texts.push({ bookId, path: item.path, text: extractText(bytes) });
-        const src = detectEncoding(bytes);
-        if (src.source === 'utf8' || src.source === 'fallback') type += `; charset=${src.encoding}`;
+        const dec = decodeHtml(bytes); // once per file
+        titles[item.path] = extractTitle(dec.html);
+        texts.push({ bookId, path: item.path, text: htmlToText(dec.html) });
+        if (dec.source === 'utf8' || dec.source === 'fallback') type += `; charset=${dec.encoding}`;
       }
       sizes[item.path] = blob.size;
-      await cache.put(cacheKey(bookId, item.path), new Response(blob, {
-        headers: { 'Content-Type': type, 'Content-Length': String(blob.size) },
-      }));
+      const key = cacheKey(bookId, item.path);
+      const headers = { 'Content-Type': type, 'Content-Length': String(blob.size) };
+      await pool.add(() => cache.put(key, new Response(blob, { headers })));
     }
+    // Every put must settle before `ready` (WebKit drops worker cache writes if the worker ends early).
+    await pool.drain();
     pagePaths.sort(naturalComparePaths);
     if (!pagePaths.length) throw new ImportError('no-html');
     let entryPath = prev ? pickReplaceEntry(pagePaths, prev.entryPath) : pickEntryPath(pagePaths);
