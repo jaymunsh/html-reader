@@ -67,6 +67,8 @@ test('문서 내용은 원본 색 그대로(앱 테마가 iframe에 새지 않�
   const id = await importFixture(page, '10-single.html');
   const f = await openBook(page, id);
   expect(await f.evaluate(() => document.documentElement.hasAttribute('data-theme'))).toBe(false);
+  expect(await page.evaluate(() => getComputedStyle(document.body).wordBreak)).toBe('keep-all');          // 셸은 어절 단위 줄바꿈
+  expect(await f.evaluate(() => getComputedStyle(document.body).wordBreak)).toBe('normal');                // 문서 내용은 건드리지 않는다
 });
 
 test('CSS가 늦게 도착해도 theme-color가 #000000으로 칠해지지 않고 결국 올바른 값이 된다', async ({ page }) => {
