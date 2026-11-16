@@ -2,7 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { deleteBookmark, getBook, getBookFiles, getProgress, getSetting, listBookmarks, listIssues, missingCount, putBookmark, setSetting, updateBook, type Book, type Bookmark, type Issue, type PageProgress } from '../../lib/storage';
   import { defaultBookmarkLabel, findNearBookmark, newBookmark, normalizeLabel } from '../../lib/bookmarks';
-  import { ProgressTracker, bookProgress, formatPageInfo } from '../../lib/progress';
+  import { ProgressTracker, bookProgress, formatPageInfo, visiblyChanged } from '../../lib/progress';
   import { neighbor, orderedPages } from '../../lib/file-tree';
   import ProgressLine from './ProgressLine.svelte';
   import type { Restore } from '../../lib/protocol';
@@ -257,11 +257,13 @@
         void updateBook(bookId, { lastPath: p, lastOpenedAt: Date.now() }).catch(() => {});
       },
       onScroll: (pct, ratio) => {
-        tracker?.update(path, pct, ratio);
+        const before = tracker?.get(path);
+        const after = tracker?.update(path, pct, ratio);
         scrollable = !(pct === 100 && ratio === 0);
         if (Number.isFinite(ratio)) curRatio = ratio;
         if (Number.isFinite(pct)) curPct = Math.min(100, Math.max(0, pct));
-        refreshBook();
+        // Every frame while scrolling: rebuild the progress map (and the file rows) only when what they show changes.
+        if (visiblyChanged(before, after)) refreshBook();
       },
       onTap,
       onKey,

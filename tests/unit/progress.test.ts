@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { applyScroll, bookProgress, pagePct, ProgressTracker } from '../../src/lib/progress';
+import { applyScroll, bookProgress, pagePct, ProgressTracker, visiblyChanged } from '../../src/lib/progress';
 
 test('pagePct', () => {
   expect(pagePct(0, 500, 2000)).toBe(25);
@@ -91,4 +91,15 @@ test('ProgressTracker: 동시 flush는 진행 중인 flush를 기다린다', asy
   const f2 = t.flush().then(() => order.push('f2'));
   release(); await f1; await f2;
   expect(order).toEqual(['start:a', 'end:a', 'f2']);
+});
+
+test('visiblyChanged: 내림한 %·안 읽음→일부·읽음 변화만 화면 갱신', () => {
+  const p = (maxPct: number, read = false) => ({ maxPct, read });
+  expect(visiblyChanged(undefined, p(0))).toBe(true);
+  expect(visiblyChanged(p(0), p(0.4))).toBe(true);            // 안 읽음 → 일부
+  expect(visiblyChanged(p(10.1), p(10.9))).toBe(false);       // 같은 10%
+  expect(visiblyChanged(p(10.9), p(11))).toBe(true);
+  expect(visiblyChanged(p(97.9, false), p(97.95, true))).toBe(true);
+  const same = p(5);
+  expect(visiblyChanged(same, same)).toBe(false);
 });

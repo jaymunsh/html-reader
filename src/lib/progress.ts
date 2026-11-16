@@ -34,6 +34,16 @@ export function bookProgress(pagePaths: string[], byPath: ReadonlyMap<string, Pi
   return { pct: sum / total, readCount, total };
 }
 
+/**
+ * Whether a page's progress changed in a way the UI shows: the floored percentage, unread → partial, or the read flag.
+ * Scroll reports arrive every frame; the shell recomputes book progress (and the file rows) only on these changes.
+ */
+export function visiblyChanged(prev: Pick<PageProgress, 'maxPct' | 'read'> | undefined, next: Pick<PageProgress, 'maxPct' | 'read'> | undefined): boolean {
+  if (prev === next) return false;
+  if (!prev || !next) return true;
+  return Math.floor(prev.maxPct) !== Math.floor(next.maxPct) || (prev.maxPct > 0) !== (next.maxPct > 0) || prev.read !== next.read;
+}
+
 export class ProgressTracker {
   private map: Map<string, PageProgress>;
   private dirty = new Set<string>();
